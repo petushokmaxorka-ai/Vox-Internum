@@ -439,7 +439,7 @@ button, .sidebar, .sidebar-btn, .panel-h2, .gmail-inbox-header,
 .license-badge.licensed { color: var(--dm-green-text); text-shadow: 0 0 8px rgba(68,170,68,0.4); }
 .license-badge.expired,
 .license-badge.revoked  { color: var(--dm-red-text); text-shadow: 0 0 6px rgba(255,85,85,0.4); }
-.license-badge.unlicensed { color: var(--dm-brass-dark); }
+.license-badge.unlicensed { color: var(--dm-copper); opacity: 0.6; }
 
 .license-current {
   display: grid; grid-template-columns: 90px 1fr; gap: 8px;

@@ -100,7 +100,8 @@ function stateFromTier(
       statusText = 'REVOKED'
       break
     default:
-      statusText = 'UNLICENSED'
+      // No backend configured → app is free/open. Don't alarm the user.
+      statusText = 'OPEN SOURCE'
   }
   return { tier, expiresAt, keyTail, statusText }
 }
