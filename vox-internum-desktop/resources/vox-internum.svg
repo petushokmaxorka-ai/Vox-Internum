@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Vox Internum — Dark Mechanicus branding: void black + gold + blood -->
+  <rect width="128" height="128" rx="20" fill="#000000"/>
+  <rect x="6" y="6" width="116" height="116" rx="16" fill="none" stroke="#c8a86e" stroke-width="2"/>
+  <!-- Inverted aureus / vox symbol: stylized V inside an astropath choir -->
+  <g stroke="#c8a86e" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 38 40 L 64 92 L 90 40"/>
+  </g>
+  <!-- Choir rays -->
+  <g stroke="#8b0000" stroke-width="3" stroke-linecap="round">
+    <line x1="64" y1="22" x2="64" y2="30"/>
+    <line x1="34" y1="30" x2="40" y2="36"/>
+    <line x1="94" y1="30" x2="88" y2="36"/>
+  </g>
+  <!-- Bottom rune -->
+  <text x="64" y="116" font-family="monospace" font-size="10" fill="#c8a86e" text-anchor="middle" letter-spacing="2">VOX</text>
+</svg>

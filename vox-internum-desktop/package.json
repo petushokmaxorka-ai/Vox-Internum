@@ -1,0 +1,100 @@
+{
+  "name": "vox-internum-desktop",
+  "version": "0.1.0",
+  "description": "VOX INTERNUM \u2014 Dark Mechanicus messenger aggregator (Electron)",
+  "main": "./out/main/index.js",
+  "author": {
+    "name": "Heretic OS",
+    "email": "heretic@heretic-os.dev"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/HereticArch/heretic-os",
+  "scripts": {
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "tsc -p tsconfig.test.json && node --test scripts/test-camouflage.mjs scripts/test-imap.mjs",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "npm run build && electron-builder --dir",
+    "build:linux": "npm run build && electron-builder --linux",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:all": "npm run build && electron-builder -mlw"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "electron-store": "^8.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/node": "^20.14.8",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.9.1",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1"
+  },
+  "build": {
+    "productName": "Vox Internum",
+    "appId": "dev.heretic-os.vox-internum",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network;InstantMessaging;",
+      "maintainer": "Heretic OS <heretic@heretic-os.dev>",
+      "icon": "build/icon.png",
+      "desktop": {
+        "StartupWMClass": "vox-internum"
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.social-networking",
+      "icon": "build/icon.png"
+    }
+  }
+}

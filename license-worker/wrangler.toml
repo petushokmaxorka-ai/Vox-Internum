@@ -1,0 +1,25 @@
+name = "vox-internum-license"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# KV namespace for license records. Create with:
+#   wrangler kv:namespace create LICENSES
+#   wrangler kv:namespace create TOKENS
+# then paste the ids below.
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "REPLACE_WITH_LICENSES_KV_ID"
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "REPLACE_WITH_TOKENS_KV_ID"
+
+# Admin secret for key-generation endpoints. Set with:
+#   wrangler secret put ADMIN_KEY
+# (a long random string — keep private)
+[vars]
+# Trial duration in days (optional; defaults to 14)
+TRIAL_DAYS = "14"
+# Max device activations per license key
+MAX_DEVICES = "3"

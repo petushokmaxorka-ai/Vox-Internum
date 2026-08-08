@@ -1,0 +1,17 @@
+{
+  "name": "vox-internum-license-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "License activation/verification backend for Vox Internum desktop client",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240614.0",
+    "typescript": "^5.5.2",
+    "wrangler": "^3.60.0"
+  }
+}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';" />
+  <title>◆ VOX INTERNUM</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR: rendered from SERVICES. 56px wide (must match SIDEBAR_WIDTH in main). -->
+  <nav class="sidebar" id="sidebar">
+    <!-- Service buttons injected by index.ts -->
+    <div class="sidebar-spacer"></div>
+    <!-- License badge — opens activate modal -->
+    <button class="sidebar-btn sidebar-btn-bottom" id="btn-license" title="LICENSE">
+      <span class="license-badge" id="license-mark">⚒</span>
+    </button>
+    <button class="sidebar-btn sidebar-btn-bottom" id="btn-settings" title="SETTINGS — SMART PROXY">
+      <span class="icon">⚙</span>
+    </button>
+  </nav>
+
+  <!-- MAIN AREA: this region is a "hole". The active WebContentsView
+       is rendered natively ON TOP of this HTML, positioned at
+       left = sidebar-width. Any overlay here must temporarily hide
+       the view (ViewManager.hideActiveView) or it will be covered.
+
+       Native panels (Gmail IMAP) live here too — when a native
+       service is active, the main process hides all web views, so
+       this HTML becomes visible. -->
+  <main class="main-area" id="main-area">
+    <!-- Loading overlay: shown when the active view is loading. -->
+    <div class="loading-overlay hidden" id="loading-overlay">
+      <div class="loading-rune">◆</div>
+      <div class="loading-text">ESTABLISHING ASTROPATHIC LINK</div>
+      <div class="loading-sub" id="loading-service">...</div>
+    </div>
+
+    <!-- GMAIL IMAP NATIVE PANEL: shown when 'gmail' is the active
+         service. Replaces the broken web-view (Google blocks sign-in). -->
+    <div class="native-panel hidden" id="gmail-panel">
+      <!-- Setup form: shown when no account configured -->
+      <div class="gmail-setup" id="gmail-setup">
+        <h2 class="panel-h2">◆ GMAIL · IMAP</h2>
+        <p class="gmail-help">
+          Google blocks in-app sign-in, so Vox Internum uses IMAP directly.
+          You need a one-time <b>App Password</b> (NOT your regular password):
+        </p>
+        <ol class="gmail-steps">
+          <li>Enable <b>2-Step Verification</b>: <a href="#" id="gmail-link-2fa">myaccount.google.com</a></li>
+          <li>Create App Password: <a href="#" id="gmail-link-apppass">myaccount.google.com/apppasswords</a></li>
+          <li>App name: <code>Vox Internum</code> → Create → copy 16-char code</li>
+          <li>Paste it below</li>
+        </ol>
+        <div class="gmail-form">
+          <input type="text" class="proxy-input" id="gmail-email" placeholder="your.address@gmail.com" autocomplete="off" />
+          <input type="password" class="proxy-input" id="gmail-pass" placeholder="App Password (16 chars)" autocomplete="off" />
+          <button class="modal-btn modal-btn-green" id="gmail-connect">◆ CONNECT &amp; FETCH</button>
+        </div>
+        <div class="modal-status" id="gmail-setup-status"></div>
+      </div>
+
+      <!-- Inbox list: shown after successful connect -->
+      <div class="gmail-inbox hidden" id="gmail-inbox">
+        <div class="gmail-inbox-header">
+          <h2 class="panel-h2">◆ GMAIL · INBOX</h2>
+          <button class="modal-btn dm-btn-small" id="gmail-refresh">↻ REFRESH</button>
+          <button class="modal-btn dm-btn-small" id="gmail-signout">✗ SIGN OUT</button>
+        </div>
+        <div class="gmail-list" id="gmail-list"></div>
+        <div class="gmail-pager">
+          <button class="modal-btn dm-btn-small" id="gmail-prev">◄ PREV</button>
+          <span class="gmail-pager-info" id="gmail-pager">PAGE 1 / 1</span>
+          <button class="modal-btn dm-btn-small" id="gmail-next">NEXT ►</button>
+        </div>
+      </div>
+
+      <!-- Reading pane: shown when a message is selected -->
+      <div class="gmail-read hidden" id="gmail-read">
+        <div class="gmail-read-header">
+          <button class="modal-btn dm-btn-small" id="gmail-back">◄ BACK</button>
+          <span class="gmail-read-subject" id="gmail-read-subject"></span>
+          <button class="modal-btn dm-btn-small" id="gmail-reply">↩ REPLY</button>
+          <button class="modal-btn dm-btn-small" id="gmail-compose-new">✎ COMPOSE</button>
+        </div>
+        <pre class="gmail-read-body" id="gmail-read-body"></pre>
+      </div>
+
+      <!-- Compose pane: shown when user hits REPLY or COMPOSE -->
+      <div class="gmail-compose hidden" id="gmail-compose">
+        <div class="gmail-read-header">
+          <button class="modal-btn dm-btn-small" id="gmail-compose-back">◄ CANCEL</button>
+          <span class="gmail-read-subject" id="gmail-compose-title">◆ COMPOSE</span>
+        </div>
+        <div class="gmail-compose-form">
+          <input type="text" class="proxy-input" id="gmail-compose-to" placeholder="TO (recipient@example.com)" autocomplete="off" />
+          <input type="text" class="proxy-input" id="gmail-compose-subject" placeholder="SUBJECT" autocomplete="off" />
+          <textarea class="proxy-input gmail-compose-body" id="gmail-compose-text" rows="14" placeholder="MESSAGE TEXT..."></textarea>
+          <div class="gmail-compose-actions">
+            <button class="modal-btn modal-btn-green" id="gmail-send">◆ SEND</button>
+            <span class="modal-status" id="gmail-compose-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- SETTINGS MODAL: per-service Smart Proxy.
+     Main process hides the active WebContentsView when this opens
+     (otherwise it paints over the modal). -->
+<div class="modal-overlay hidden" id="settings-overlay">
+  <div class="modal">
+    <h2 class="modal-title">◆ SMART PROXY ROUTING</h2>
+    <p class="modal-desc">PER-SERVICE ROUTING. EMPTY = DIRECT. FORMAT: SOCKS5://[USER:PASS@]HOST:PORT</p>
+    <div id="proxy-rows"><!-- injected by index.ts --></div>
+    <div class="proxy-actions">
+      <button class="modal-btn modal-btn-green" id="btn-close-settings">◆ CLOSE</button>
+    </div>
+    <div class="modal-status" id="settings-status"></div>
+  </div>
+</div>
+
+<!-- MCP HITL APPROVAL: shown when an LLM client requests a write action
+     (e.g. send_message). User MUST explicitly approve before anything
+     is injected. Main hides the active view first, like settings. -->
+<div class="modal-overlay hidden" id="approve-overlay">
+  <div class="modal">
+    <h2 class="modal-title modal-title-alert">⚠ MCP ACTION REQUIRES APPROVAL</h2>
+    <p class="modal-desc">AN EXTERNAL LLM CLIENT REQUESTED THE ACTION BELOW. REVIEW AND APPROVE EXPLICITLY.</p>
+    <div class="approve-grid">
+      <div class="approve-row"><span class="approve-key">ACTION</span><span class="approve-val" id="approve-action">—</span></div>
+      <div class="approve-row"><span class="approve-key">SERVICE</span><span class="approve-val" id="approve-service">—</span></div>
+      <div class="approve-row"><span class="approve-key">PAYLOAD</span><span class="approve-val approve-payload" id="approve-summary">—</span></div>
+    </div>
+    <div class="proxy-actions">
+      <button class="modal-btn modal-btn-green" id="btn-approve-yes">✓ APPROVE</button>
+      <button class="modal-btn modal-btn-red" id="btn-approve-no">✗ DENY</button>
+    </div>
+    <div class="modal-status" id="approve-status">Auto-denies in 60s if unanswered.</div>
+  </div>
+</div>
+
+<!-- LICENSE MODAL: enter key, see current tier, forget activation. -->
+<div class="modal-overlay hidden" id="license-overlay">
+  <div class="modal">
+    <h2 class="modal-title">◆ LICENSE REGISTRATION</h2>
+    <p class="modal-desc">PASTE YOUR VOX INTERNUM LICENSE KEY TO ACTIVATE PRO FEATURES.</p>
+    <div class="license-current">
+      <span class="approve-key">STATUS</span>
+      <span class="approve-val" id="license-status">CHECKING…</span>
+    </div>
+    <div class="modal-field">
+      <input type="text" class="proxy-input" id="license-key-input"
+             placeholder="VOX-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX" autocomplete="off" />
+    </div>
+    <div class="proxy-actions">
+      <button class="modal-btn modal-btn-green" id="btn-license-activate">◆ ACTIVATE</button>
+      <button class="modal-btn modal-btn-red" id="btn-license-forget">✗ FORGET</button>
+      <button class="modal-btn" id="btn-license-close">◆ CLOSE</button>
+    </div>
+    <div class="modal-status" id="license-msg"></div>
+  </div>
+</div>
+
+<script type="module" src="./index.ts"></script>
+</body>
+</html>
