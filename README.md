@@ -1,4 +1,4 @@
-# ◆ ASTRAL VOX
+# ◆ VOX INTERNUM
 
 > Dark Mechanicus messenger & mail aggregator. One Electron app, one
 > isolated session per service. Telegram, WhatsApp, VK, MAX, Yandex
@@ -44,7 +44,7 @@ npm run build:linux       # → release/Vox Internum-0.1.0.AppImage
 Gmail uses native IMAP — Google blocks Electron web sign-in.
 1. Enable 2-Step Verification: [myaccount.google.com](https://myaccount.google.com/security)
 2. Create App Password: [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-3. In ASTRAL VOX: click **GM** → enter email + App Password → **CONNECT**
+3. In VOX INTERNUM: click **GM** → enter email + App Password → **CONNECT**
 
 ## ✗ What doesn't work (honestly)
 
