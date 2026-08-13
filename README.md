@@ -10,14 +10,13 @@ palette, gothic typography, phosphor glow.
 
 ## ## ⬇ Downloads (latest)
 
-**[Release v0.3.2](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.3.2)**
+**[Release v0.3.3](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.3.3)**
 
 | OS | File |
 |----|------|
-| Windows | [Vox.Internum-0.3.2-portable.exe](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.2/Vox.Internum-0.3.2-portable.exe) |
-| Windows | [Vox.Internum-0.3.2-win-x64.zip](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.2/Vox.Internum-0.3.2-win-x64.zip) |
-| Linux | [Vox.Internum-0.3.2.AppImage](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.2/Vox.Internum-0.3.2.AppImage) |
-| Linux | [vox-internum-desktop-0.3.2.tar.gz](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.2/vox-internum-desktop-0.3.2.tar.gz) |
+| Windows | [Vox.Internum-0.3.3-portable.exe](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.3/Vox.Internum-0.3.3-portable.exe) |
+| Windows | [Vox.Internum-0.3.3-win-x64.zip](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.3/Vox.Internum-0.3.3-win-x64.zip) |
+| Linux | [Vox.Internum-0.3.2.AppImage](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.2/Vox.Internum-0.3.2.AppImage) *(0.3.2 — Linux unchanged)* |
 
 All releases: https://github.com/petushokmaxorka-ai/vox-internum/releases
 
