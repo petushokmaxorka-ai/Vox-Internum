@@ -8,7 +8,19 @@
 WH40k cogitator aesthetic: CRT scanlines, copper/brass/AdMech-red
 palette, gothic typography, phosphor glow.
 
-## ⚒ Features
+## ## ⬇ Downloads (latest)
+
+**[Release v0.3.1](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.3.1)**
+
+| OS | File |
+|----|------|
+| Linux | [Vox.Internum-0.3.1.AppImage](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.1/Vox.Internum-0.3.1.AppImage) |
+| Linux | [vox-internum-desktop-0.3.1.tar.gz](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.1/vox-internum-desktop-0.3.1.tar.gz) |
+| Windows | [Vox.Internum-0.3.1-portable.exe](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.3.1/Vox.Internum-0.3.1-portable.exe) |
+
+All releases: https://github.com/petushokmaxorka-ai/vox-internum/releases
+
+⚒ Features
 
 - **7 services** in isolated Chromium partitions (cookies/cache separated):
   - Telegram, WhatsApp, VK, MAX (web clients)
@@ -36,7 +48,7 @@ palette, gothic typography, phosphor glow.
 cd vox-internum-desktop
 npm install
 npm run dev               # dev mode
-npm run build:linux       # → release/Vox Internum-0.1.0.AppImage
+npm run build:linux       # → release/Vox Internum-0.3.1.AppImage
 ```
 
 ## ◆ Gmail setup (IMAP)
