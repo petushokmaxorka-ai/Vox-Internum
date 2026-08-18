@@ -9,14 +9,15 @@
 //   §3.4 — electron-store writes only to app.getPath('userData').
 //   §3.7 — contextIsolation:true, sandbox:true, nodeIntegration:false.
 
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, dialog } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { IPC_CHANNELS } from '../shared/types'
 import type { SetProxyResult, McpApproveRequest } from '../shared/types'
 import { SERVICES, DEFAULT_SERVICE, findService } from './services'
 import { ViewManager } from './view-manager'
-import { getLastActiveService, setLastActiveService, getProxies, setProxy } from './storage'
+import { getLastActiveService, setLastActiveService, getProxies, setProxy, getTheme, setTheme } from './storage'
 import { parseProxy, applyProxy, applySystemProxy } from './session-router'
 import { startMcpServer, createApproval, resolveApproval } from './mcp/server'
 import { getLicenseState, activateLicense, forgetLicense } from './license'
@@ -28,13 +29,41 @@ import {
   sendGmailMessage
 } from './imap/manager'
 import { setGmailAccount, clearGmailAccount } from './imap/accounts'
+import { applyIpv4HostResolverRules } from './ipv4-hosts'
+import {
+  checkForUpdate,
+  dismissUpdate,
+  openUpdatePage,
+  installUpdate,
+  scheduleUpdateCheck
+} from './updater'
 
-// Embedding multiple WebContentsViews (6 services) taxes the GPU
-// process; on VRAM-constrained hosts each view tries to spawn its
-// own GPU subprocess and the launch fails fatally. Disabling hardware
-// acceleration globally keeps all views on the software renderer,
-// which is fine for 2D web apps. MUST run before app.whenReady.
-app.disableHardwareAcceleration()
+// GPU policy:
+//   Linux  → hardware GPU (SwiftShader freezes TG fast-scroll).
+//   Windows → software GPU by default (hardware + ignore-gpu-blocklist
+//             crashed portable/NSIS builds with the generic Electron
+//             error dialog after a brief flash). Opt in: VOX_ENABLE_GPU=1.
+//   Override off anywhere: VOX_DISABLE_GPU=1.
+const wantGpu =
+  process.env.VOX_DISABLE_GPU !== '1' &&
+  (process.platform !== 'win32' || process.env.VOX_ENABLE_GPU === '1')
+if (!wantGpu) {
+  app.disableHardwareAcceleration()
+  console.log(`[vox-internum] GPU disabled (${process.platform})`)
+} else {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+  console.log('[vox-internum] GPU enabled')
+}
+
+// MiniMax (Akamai) AAAA is blackholed here — force A records or Chromium hangs.
+applyIpv4HostResolverRules()
+
+// Telegram Web voice notes + notification sounds: Chromium's default
+// autoplay policy + AudioServiceSandbox often yield silent <audio>/WebAudio
+// under Electron on Linux (Pulse/PipeWire). Allow autoplay without a prior
+// gesture and run the audio service unsandboxed so it can reach the sink.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+app.commandLine.appendSwitch('disable-features', 'AudioServiceSandbox')
 
 // ─── Anti-automation defeat (Gmail sign-in bypass) ─────────
 // Google's "This browser or app may not be secure" screen detects
@@ -76,6 +105,41 @@ app.on('second-instance', () => {
 
 const manager = new ViewManager()
 
+// Surface real crash reasons instead of a blank "Electron" dialog.
+process.on('uncaughtException', (err) => {
+  console.error('[vox-internum] uncaughtException', err)
+  try {
+    dialog.showErrorBox('Vox Internum crashed', err?.stack || String(err))
+  } catch {
+    /* ignore */
+  }
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[vox-internum] unhandledRejection', reason)
+})
+
+/** Resolve the branded launcher icon (repo build/ → packaged resources/). */
+function appIconPath(): string | null {
+  const candidates = [
+    join(__dirname, '../../build/icon.png'),
+    join(__dirname, '../../resources/icon.png'),
+    join(process.resourcesPath ?? '', 'build/icon.png'),
+    join(process.resourcesPath ?? '', 'icon.png')
+  ]
+  for (const p of candidates) {
+    if (p && existsSync(p)) return p
+  }
+  return null
+}
+
+function loadAppIcon(size?: number): Electron.NativeImage {
+  const path = appIconPath()
+  if (!path) return nativeImage.createEmpty()
+  const img = nativeImage.createFromPath(path)
+  if (img.isEmpty()) return img
+  return size ? img.resize({ width: size, height: size }) : img
+}
+
 // ─── IPC ────────────────────────────────────────────────────
 function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.VOX_GET_SERVICES, () => SERVICES)
@@ -95,10 +159,13 @@ function registerIpc(): void {
     }
     try {
       const trimmed = (url || '').trim()
-      // Empty / 'direct://' → revert to the system proxy resolved from
-      // env (HTTP_PROXY etc). An explicit proxy URL overrides it.
+      const lower = trimmed.toLowerCase()
+      // Empty → system proxy (messengers). Explicit direct:// → DIRECT
+      // (must NOT fall through to ALL_PROXY — that breaks AI/mail).
       let applied: string
-      if (trimmed && trimmed.toLowerCase() !== 'direct://') {
+      if (lower === 'direct://' || lower === 'direct') {
+        applied = await applyProxy(serviceId, parseProxy('direct://'))
+      } else if (trimmed) {
         const parsed = parseProxy(trimmed)
         applied = await applyProxy(serviceId, parsed)
       } else {
@@ -115,7 +182,10 @@ function registerIpc(): void {
     if (!findService(serviceId)) return { ok: false }
     const storedUrl = getProxies()[serviceId]?.url ?? ''
     const trimmed = storedUrl.trim()
-    if (trimmed && trimmed.toLowerCase() !== 'direct://') {
+    const lower = trimmed.toLowerCase()
+    if (lower === 'direct://' || lower === 'direct') {
+      await applyProxy(serviceId, parseProxy('direct://'))
+    } else if (trimmed) {
       await applyProxy(serviceId, parseProxy(trimmed))
     } else {
       await applySystemProxy(serviceId)
@@ -132,6 +202,30 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC_CHANNELS.VOX_SHOW_ACTIVE_VIEW, () => {
     manager.showActiveView()
+    return { ok: true }
+  })
+
+  // Theme (chrome only — never force nativeTheme on embedded messengers)
+  ipcMain.handle(IPC_CHANNELS.VOX_GET_THEME, () => getTheme())
+  ipcMain.handle(IPC_CHANNELS.VOX_SET_THEME, (_e, theme: string) => {
+    const next = theme === 'dark' ? 'dark' : 'light'
+    setTheme(next)
+    return { ok: true, theme: next }
+  })
+
+  // Updates (GitHub Releases)
+  ipcMain.handle(IPC_CHANNELS.VOX_CHECK_UPDATE, () => checkForUpdate())
+  ipcMain.handle(IPC_CHANNELS.VOX_DISMISS_UPDATE, (_e, version: string) => {
+    dismissUpdate(String(version || ''))
+    return { ok: true }
+  })
+  ipcMain.handle(IPC_CHANNELS.VOX_OPEN_UPDATE, async (_e, url: string) => {
+    await openUpdatePage(String(url || ''))
+    return { ok: true }
+  })
+  // Tier 1 auto-update: restart into the already-downloaded build.
+  ipcMain.handle(IPC_CHANNELS.VOX_INSTALL_UPDATE, () => {
+    installUpdate()
     return { ok: true }
   })
 
@@ -204,6 +298,87 @@ function registerIpc(): void {
       return sendGmailMessage(input)
     }
   )
+
+  // Google cookie import + normal sign-in helpers
+  ipcMain.handle(
+    IPC_CHANNELS.VOX_IMPORT_GOOGLE_COOKIES,
+    async (_e, pairs: Array<{ name: string; value: string }>) => {
+      const activeId = manager.getActive()
+      const active = manager.getActiveView()
+      if (!active) return { ok: false, set: 0, skipped: 0, error: 'no active view — open a service tab first' }
+      const { injectGoogleCookiePairs } = await import('./cookie-import')
+      const result = await injectGoogleCookiePairs(active.webContents.session, pairs)
+      if (result.ok) {
+        manager.reloadService(activeId)
+      }
+      return result
+    }
+  )
+
+  ipcMain.handle('vox:auto-import-chrome-cookies', async () => {
+    const activeId = manager.getActive()
+    const active = manager.getActiveView()
+    if (!active) return { ok: false, set: 0, skipped: 0, error: 'no active view — open a service tab first' }
+    const { importGoogleCookiesFromBrowser } = await import('./cookie-import')
+    const result = await importGoogleCookiesFromBrowser(active.webContents.session)
+    if (result.ok) {
+      manager.reloadService(activeId)
+    }
+    return result
+  })
+
+  // Top-level Google sign-in window (often blocked by Google — CDP preferred).
+  ipcMain.handle('vox:open-google-signin-popup', () => {
+    manager.openGoogleSignIn()
+    return { ok: true }
+  })
+
+  // Real Chrome (temp profile + CDP) — the path Google actually accepts.
+  ipcMain.handle('vox:open-chrome-google-login', async () => {
+    const { startChromeGoogleLogin } = await import('./chrome-cdp-login')
+    return startChromeGoogleLogin()
+  })
+
+  ipcMain.handle('vox:pull-chrome-cdp-cookies', async () => {
+    const activeId = manager.getActive()
+    const active = manager.getActiveView()
+    if (!active) return { ok: false, set: 0, skipped: 0, error: 'no active view — open an AI tab first' }
+    const svc = findService(activeId)
+    const { pullGoogleCookiesFromChromeCdp, takePendingWebStorage } = await import('./chrome-cdp-login')
+    const result = await pullGoogleCookiesFromChromeCdp(active.webContents.session, {
+      serviceId: activeId,
+      serviceUrl: svc?.url || ''
+    })
+    if (result.ok) {
+      manager.reloadService(activeId)
+      const st = takePendingWebStorage(activeId)
+      if (st && (Object.keys(st.local).length || Object.keys(st.session).length)) {
+        const view = active
+        const apply = (): void => {
+          if (view.webContents.isDestroyed()) return
+          const payload = JSON.stringify(st)
+          void view.webContents
+            .executeJavaScript(
+              `(function(){ try {
+                const st = ${payload};
+                Object.entries(st.local||{}).forEach(([k,v]) => localStorage.setItem(k, String(v)));
+                Object.entries(st.session||{}).forEach(([k,v]) => sessionStorage.setItem(k, String(v)));
+                location.reload();
+              } catch(e) {} })()`
+            )
+            .catch(() => undefined)
+        }
+        view.webContents.once('did-finish-load', () => setTimeout(apply, 400))
+      }
+    }
+    return result
+  })
+
+  ipcMain.handle('vox:stop-chrome-google-login', async () => {
+    const { stopChromeGoogleLogin } = await import('./chrome-cdp-login')
+    stopChromeGoogleLogin()
+    return { ok: true }
+  })
 }
 
 // ─── Window ─────────────────────────────────────────────────
@@ -214,8 +389,9 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 600,
     show: false,
-    backgroundColor: '#000000',
+    backgroundColor: '#f0e6d2',
     title: 'VOX INTERNUM',
+    icon: loadAppIcon(256),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -227,6 +403,13 @@ function createWindow(): BrowserWindow {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // Keep chrome title as VOX INTERNUM — don't let the shell page or
+  // Windows fall back to the raw Electron binary name in the title bar.
+  mainWindow.on('page-title-updated', (e) => {
+    e.preventDefault()
+    if (!mainWindow.isDestroyed()) mainWindow.setTitle('VOX INTERNUM')
   })
 
   // External links from the renderer (none expected, but defensive)
@@ -255,10 +438,8 @@ function createWindow(): BrowserWindow {
 
 // ─── Tray ───────────────────────────────────────────────────
 function createTray(win: BrowserWindow): Tray | null {
-  // 16x16 transparent-on-black gold square placeholder.
-  // Replaced with a real icon in resources/ later.
-  const icon = nativeImage.createEmpty()
-  const tray = new Tray(icon)
+  const icon = loadAppIcon(22)
+  const tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
   tray.setToolTip('VOX INTERNUM')
 
   const menu = Menu.buildFromTemplate([
@@ -308,11 +489,13 @@ function createTray(win: BrowserWindow): Tray | null {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('dev.heretic-os.vox-internum')
 
-  // On Linux, WM_CLASS is derived from app.name (defaults to the
-  // package "name" = "vox-internum-desktop"). Override to match the
-  // StartupWMClass in the .desktop file so the taskbar groups the
-  // running window with the launcher icon.
-  app.setName('vox-internum')
+  // Linux WM_CLASS must match StartupWMClass=vox-internum in the .desktop
+  // file. Windows taskbar / Alt-Tab use app name + PE ProductName.
+  if (process.platform === 'linux') {
+    app.setName('vox-internum')
+  } else {
+    app.setName('Vox Internum')
+  }
 
   app.on('browser-window-created', (_e, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -321,6 +504,7 @@ app.whenReady().then(() => {
   registerIpc()
   const win = createWindow()
   createTray(win)
+  scheduleUpdateCheck(() => (win.isDestroyed() ? null : win))
 
   // Safe send: renderer frame may not be ready yet (or may have been
   // disposed) when the embedded views fire loading/title events.
@@ -350,6 +534,54 @@ app.whenReady().then(() => {
       // Tell the license client to use the dev server.
       process.env['VOX_LICENSE_URL'] = `http://127.0.0.1:8788`
     })
+  }
+
+  // Wire cookie-import: context menu → renderer modal → IPC inject.
+  manager.onCookieImport = () => {
+    safeSend('vox:open-cookie-import', {})
+  }
+
+  // One-shot from context menu: CDP pull (auto-opens Chrome if needed).
+  manager.onPullChromeGoogle = async () => {
+    const activeId = manager.getActive()
+    const active = manager.getActiveView()
+    if (!active) return
+    const svc = findService(activeId)
+    const { pullGoogleCookiesFromChromeCdp } = await import('./chrome-cdp-login')
+    const result = await pullGoogleCookiesFromChromeCdp(active.webContents.session, {
+      serviceId: activeId,
+      serviceUrl: svc?.url || ''
+    })
+    if (result.ok) {
+      manager.reloadService(activeId)
+      const { takePendingWebStorage } = await import('./chrome-cdp-login')
+      const st = takePendingWebStorage(activeId)
+      if (st && (Object.keys(st.local).length || Object.keys(st.session).length)) {
+        const view = active
+        const apply = (): void => {
+          if (view.webContents.isDestroyed()) return
+          const payload = JSON.stringify(st)
+          void view.webContents
+            .executeJavaScript(
+              `(function(){ try {
+                const st = ${payload};
+                Object.entries(st.local||{}).forEach(([k,v]) => localStorage.setItem(k, String(v)));
+                Object.entries(st.session||{}).forEach(([k,v]) => sessionStorage.setItem(k, String(v)));
+                location.reload();
+              } catch(e) {} })()`
+            )
+            .catch(() => undefined)
+        }
+        view.webContents.once('did-finish-load', () => setTimeout(apply, 400))
+      }
+      safeSend('vox:cookie-status', {
+        ok: true,
+        message: `✓ ${result.set} cookies — site OK. Chrome stays open for next AI.`
+      })
+    } else {
+      safeSend('vox:open-cookie-import', {})
+      safeSend('vox:cookie-status', { ok: false, message: result.error || 'Pull failed' })
+    }
   }
 
   // MCP server: expose tools to an LLM dashboard. HITL approval flows

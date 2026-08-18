@@ -81,7 +81,7 @@ const pendingApprovals = new Map<
  * per new session (and once per stateless request).
  */
 function buildServer(cb: McpCallbacks): McpServer {
-  const mcp = new McpServer({ name: 'vox-internum', version: '0.1.0' })
+  const mcp = new McpServer({ name: 'vox-internum', version: '0.3.0' })
 
   // ── Tool: list_services (read-only) ──────────────────────
   mcp.registerTool(

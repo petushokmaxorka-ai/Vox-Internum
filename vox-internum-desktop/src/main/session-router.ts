@@ -171,24 +171,28 @@ export async function applySystemProxy(serviceId: string): Promise<string> {
   const partition = partitionFor(serviceId)
   const ses: Session = sessionModule.fromPartition(partition)
 
-  // Prefer ALL_PROXY (socks), then HTTPS_PROXY, then HTTP_PROXY.
+  // Prefer ALL_PROXY (socks), then HTTPS_PROXY, then HTTP_PROXY,
+  // then TELEGRAM_PROXY_URL (heretic-os.env convention).
   const env = process.env
-  const candidate =
+  let chosen = (
     env['ALL_PROXY'] || env['all_proxy'] ||
     env['HTTPS_PROXY'] || env['https_proxy'] ||
     env['HTTP_PROXY'] || env['http_proxy'] ||
+    env['TELEGRAM_PROXY_URL'] ||
     ''
+  ).trim()
 
-  if (!candidate.trim()) {
-    // No system proxy configured — go direct.
+  // On this host :7890 is SOCKS (xray), not HTTP — rewrite mistaken scheme.
+  if (/^https?:\/\/(127\.0\.0\.1|localhost):7890$/i.test(chosen)) {
+    chosen = 'socks5://127.0.0.1:7890'
+  }
+
+  if (!chosen) {
     await ses.setProxy({ proxyRules: 'direct://' })
     return 'direct'
   }
 
-  // Parse the env URL: may be 'http://host:port', 'socks5://host:port',
-  // or 'socks5://user:pass@host:port'. We split creds out for the
-  // login handler (same as user-supplied Smart Proxy).
-  const parsed = parseProxy(candidate)
+  const parsed = parseProxy(chosen)
   if (parsed.error || parsed.direct) {
     await ses.setProxy({ proxyRules: 'direct://' })
     return 'direct'

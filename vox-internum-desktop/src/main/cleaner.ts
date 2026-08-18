@@ -23,10 +23,31 @@
 //     web presence is thin. Selectors are best-effort.
 //   - Selectors WILL need maintenance as services update. The file is
 //     intentionally isolated so updates touch nothing else.
+//
+// DO NOT inject global ::-webkit-scrollbar rules. Forcing a 10px black
+// horizontal track paints a "black shelf" inside search inputs and
+// compact toolbars across WhatsApp / VK / mail.
 
 import type { WebContentsView } from 'electron'
 
 // ─── Per-service CSS ────────────────────────────────────────
+
+const AI_COMMON_CSS = `
+  /* Common cleanup for AI chat services. They all have cookie
+     consent banners, "download app" promos, and side panels we
+     don't need inside Vox Internum. */
+  [class*="cookie"],
+  [class*="Cookie"],
+  [id*="cookie"],
+  [class*="download-app"],
+  [class*="DownloadApp"],
+  [class*="install-prompt"],
+  [class*="promo-banner"],
+  [class*="PromoBanner"],
+  [class*="app-banner"] {
+    display: none !important;
+  }
+`
 
 const TELEGRAM_CSS = `
   /* Telegram Web K is already a clean chat UI. Trim only the
@@ -38,6 +59,14 @@ const TELEGRAM_CSS = `
   [class*="CookieConsent"] {
     display: none !important;
   }
+  /* Soften scroll jank: avoid animating backdrop filters on the
+     message stack while the user flings history upward. */
+  .bubbles .bubble,
+  .Message,
+  [class*="message"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 `
 
 const VK_CSS = `
@@ -46,34 +75,13 @@ const VK_CSS = `
      Selectors: ID-first (stable), then class fallbacks. */
   #page_header,
   #side_bar,
+  #side_bar_inner,
   #l,
   #left_ads,
+  #ads_left,
+  #right_box,
   #stl_side,
   #stl_left,
-  .vk__page_header,
-  .PageHeader,
-  .header__row,
-  [class*="PageHeader"],
-  #side_bar_inner,
-  .side_bar_inner,
-  .LeftMenu,
-  [class*="LeftMenu"],
-  .ui_rmenu,
-  #ads_left,
-  .ads_box,
-  #right_box,
-  .layout__column_right,
-  [class*="LayoutRight"],
-  .app_widget,
-  .im-page--chat-header-bubble { /* promo in chat list */ }
-  /* The above empty rule is a no-op; real hiding below. */
-  #page_header,
-  #side_bar,
-  #side_bar_inner,
-  #l,
-  #left_ads,
-  #ads_left,
-  #right_box,
   .vk__page_header,
   [class*="PageHeader"],
   [class*="LeftMenu"],
@@ -85,33 +93,25 @@ const VK_CSS = `
   [class*="CookieConsent"] {
     display: none !important;
   }
-  /* Reclaim the freed horizontal space for the chat surface. */
+  /* Collapse leftover header height so search isn't under a black gap. */
+  #page_header {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   .layout,
-  body.im .layout {
+  body.im .layout,
+  #page_layout,
+  .App {
     padding-left: 0 !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
   }
   .im-page-classic {
     left: 0 !important;
-  }
-  /* Custom scrollbar in Vox Internum gold/black palette to match
-     the surrounding chrome instead of VK's default light-grey. */
-  ::-webkit-scrollbar {
-    width: 10px !important;
-    height: 10px !important;
-  }
-  ::-webkit-scrollbar-track {
-    background: #050505 !important;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #5a4a3a !important;
-    border-radius: 5px !important;
-    border: 2px solid #050505 !important;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #c8a86e !important;
-  }
-  ::-webkit-scrollbar-corner {
-    background: #050505 !important;
+    top: 0 !important;
   }
 `
 
@@ -129,6 +129,19 @@ const MAX_CSS = `
   }
 `
 
+const OK_CSS = `
+  /* Odnoklassniki (ok.ru/messages): conservative cleanup — hide the
+     "install mobile app" interstitial and cookie consent only. Never
+     touch anything that might carry login UI (mail.ru lesson above). */
+  [class*="DownloadApp"],
+  [class*="InstallPrompt"],
+  [class*="app-promo"],
+  [class*="CookieConsent"],
+  [class*="cookieBanner"] {
+    display: none !important;
+  }
+`
+
 const WHATSAPP_CSS = `
   /* WhatsApp Web (web.whatsapp.com): trim the "download the app"
      banner, cookie consent dialog, and any upsell. WhatsApp has
@@ -138,20 +151,15 @@ const WHATSAPP_CSS = `
   [class*="DownloadPanel"],
   [class*="cookie-policy"],
   [data-testid="cookie-banner"],
-  [class*="CookieBanner"],
-  [class*="intro-"] {
+  [class*="CookieBanner"] {
     display: none !important;
   }
-  /* Custom scrollbar in Vox Internum palette. */
-  ::-webkit-scrollbar { width: 10px !important; height: 10px !important; }
-  ::-webkit-scrollbar-track { background: #050505 !important; }
-  ::-webkit-scrollbar-thumb {
-    background: #5a4a3a !important; border-radius: 5px !important;
-    border: 2px solid #050505 !important;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: #c8a86e !important; }
-  ::-webkit-scrollbar-corner { background: #050505 !important; }
 `
+
+const ZAI_CSS = AI_COMMON_CSS
+const KIMI_CSS = AI_COMMON_CSS
+const MINIMAX_CSS = AI_COMMON_CSS
+const QWEN_CSS = AI_COMMON_CSS
 
 const YANDEX_CSS = `
   /* Yandex Mail (mail.yandex.ru): hide the right-side widgets pane
@@ -186,15 +194,6 @@ const MAILRU_CSS = `
   [data-testid="promoredlink"] {
     display: none !important;
   }
-  /* Custom scrollbar in Vox Internum palette. */
-  ::-webkit-scrollbar { width: 10px !important; height: 10px !important; }
-  ::-webkit-scrollbar-track { background: #050505 !important; }
-  ::-webkit-scrollbar-thumb {
-    background: #5a4a3a !important; border-radius: 5px !important;
-    border: 2px solid #050505 !important;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: #c8a86e !important; }
-  ::-webkit-scrollbar-corner { background: #050505 !important; }
 `
 
 const GMAIL_CSS = `
@@ -208,15 +207,6 @@ const GMAIL_CSS = `
   }
   /* Stretch the main mail area to fill the freed width. */
   .bkK > .nH { width: 100% !important; }
-  /* Custom scrollbar in Vox Internum palette. */
-  ::-webkit-scrollbar { width: 10px !important; height: 10px !important; }
-  ::-webkit-scrollbar-track { background: #050505 !important; }
-  ::-webkit-scrollbar-thumb {
-    background: #5a4a3a !important; border-radius: 5px !important;
-    border: 2px solid #050505 !important;
-  }
-  ::-webkit-scrollbar-thumb:hover { background: #c8a86e !important; }
-  ::-webkit-scrollbar-corner { background: #050505 !important; }
 `
 
 /** Map serviceId -> CSS string to inject. Empty = no cleaning. */
@@ -225,6 +215,11 @@ const CLEANERS: Record<string, string> = {
   whatsapp: WHATSAPP_CSS,
   vk: VK_CSS,
   max: MAX_CSS,
+  ok: OK_CSS,
+  zai: ZAI_CSS,
+  kimi: KIMI_CSS,
+  minimax: MINIMAX_CSS,
+  qwen: QWEN_CSS,
   yandex: YANDEX_CSS,
   mailru: MAILRU_CSS,
   gmail: GMAIL_CSS
@@ -235,11 +230,10 @@ const CLEANERS: Record<string, string> = {
  * (SPAs rebuild DOM on navigation). Safe to call repeatedly;
  * Electron dedupes identical insertCSS calls.
  *
- * Dark-theme handling: instead of guessing localStorage formats
- * (which differ wildly across services and break on updates), we
- * rely on Electron's nativeTheme.themeSource = 'dark' (set in
- * main/index.ts). Services that respect prefers-color-scheme
- * (Telegram Web K, modern mail) automatically render dark.
+ * Dark-theme handling: we do NOT force nativeTheme.themeSource —
+ * leaving it at 'system' is required (forcing 'dark' broke mail.ru).
+ * Services that respect prefers-color-scheme can still render dark
+ * via their own settings (TG: Chat Settings → Night).
  */
 export function applyCleaner(view: WebContentsView, serviceId: string): void {
   const css = CLEANERS[serviceId]

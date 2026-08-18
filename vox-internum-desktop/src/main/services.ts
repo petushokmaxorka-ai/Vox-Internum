@@ -41,6 +41,44 @@ export const SERVICES: ServiceConfig[] = [
     url: 'https://web.max.ru/',
     category: 'messenger'
   },
+  {
+    id: 'ok',
+    label: 'OK',
+    name: 'Odnoklassniki',
+    // /messages — the messenger surface; full social feed is at ok.ru.
+    url: 'https://ok.ru/messages',
+    category: 'messenger'
+  },
+  // ── AI chats ──────────────────────────────────────────────
+  {
+    id: 'zai',
+    label: 'Z',
+    name: 'Z.ai',
+    url: 'https://chat.z.ai/',
+    category: 'ai'
+  },
+  {
+    id: 'kimi',
+    label: 'KI',
+    name: 'Kimi',
+    url: 'https://www.kimi.com/',
+    category: 'ai'
+  },
+  {
+    id: 'minimax',
+    label: 'MM',
+    name: 'MiniMax',
+    url: 'https://agent.minimax.io/',
+    category: 'ai'
+    // Loads in-app. Broken AAAA handled by ipv4-hosts.ts (+ disable-ipv6).
+  },
+  {
+    id: 'qwen',
+    label: 'QW',
+    name: 'Qwen',
+    url: 'https://chat.qwen.ai/',
+    category: 'ai'
+  },
   // ── Mail relays ───────────────────────────────────────────
   {
     id: 'gmail',

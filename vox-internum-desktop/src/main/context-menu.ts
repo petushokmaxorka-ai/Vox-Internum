@@ -1,31 +1,21 @@
 // ═══════════════════════════════════════════════════════════
 // VOX INTERNUM — Per-view Context Menu
 // ═══════════════════════════════════════════════════════════
-// Right-click in any messenger view shows this menu. Provides the
-// "default browser" affordances (copy/cut/paste/select-all) that
-// Electron turns off by default, plus app-specific actions:
-//   - Back / Forward / Reload (navigation within the SPA)
-//   - Sign out: clears the service's session partition and reloads
-//     the login page. Useful when selling the machine or switching
-//     accounts.
+// Right-click: Copy / Paste / Select All (explicit clipboard — role:'copy'
+// is unreliable inside WebContentsView), navigation, Google Sign-in,
+// Pull cookies from real Chrome (CDP), Sign out.
 
-import { Menu, dialog, type BrowserWindow, type WebContentsView } from 'electron'
+import { Menu, clipboard, dialog, type BrowserWindow, type WebContentsView } from 'electron'
 
 interface MenuDeps {
-  /** Resolve the currently-active service id. */
   getActiveService: () => string
-  /** Resolve the currently-visible WebContentsView. */
   getActiveView: () => WebContentsView | null
-  /** Clear the session partition for a service + reload to login. */
   signOut: (serviceId: string) => Promise<void>
+  openCookieImport?: () => void
+  /** Start/pull Google login via real Chrome CDP (no F12 / no keyring). */
+  pullChromeGoogle?: () => Promise<void>
 }
 
-/**
- * Attach a context-menu handler to a WebContentsView. Call this for
- * every view that ViewManager creates. The handler resolves the
- * active view through deps.getActiveView() so the menu always acts
- * on what's currently visible.
- */
 export function attachContextMenu(wc: Electron.WebContents, win: BrowserWindow, deps: MenuDeps): void {
   wc.on('context-menu', (_event, params) => {
     showMenu(win, params, deps)
@@ -39,45 +29,72 @@ function showMenu(
 ): void {
   const activeService = deps.getActiveService()
   const editable = params.isEditable
-  const hasSelection = params.selectionText && params.selectionText.length > 0
+  const selection = (params.selectionText || '').trim()
+  const hasSelection = selection.length > 0
 
   const template: Electron.MenuItemConstructorOptions[] = []
 
-  // Editing actions (only when an input/textarea/contenteditable is focused)
-  if (editable) {
-    if (hasSelection) {
-      template.push({ label: '✂ Cut', role: 'cut' })
+  // Always expose Copy when there is a selection (explicit clipboard write).
+  template.push({
+    label: '◆ Copy',
+    accelerator: 'CmdOrCtrl+C',
+    enabled: hasSelection,
+    click: (): void => {
+      if (selection) clipboard.writeText(selection)
     }
-    template.push({ label: '◆ Copy', role: 'copy' })
+  })
+
+  if (editable) {
+    template.push({
+      label: '✂ Cut',
+      enabled: hasSelection,
+      click: (): void => {
+        if (!selection) return
+        clipboard.writeText(selection)
+        const view = deps.getActiveView()
+        view?.webContents.delete()
+      }
+    })
     template.push({
       label: '➜ Paste',
-      role: 'paste',
-      enabled: params.editFlags.canPaste !== false
+      accelerator: 'CmdOrCtrl+V',
+      enabled: params.editFlags.canPaste !== false,
+      click: (): void => {
+        const text = clipboard.readText()
+        if (!text) return
+        deps.getActiveView()?.webContents.insertText(text)
+      }
     })
-    template.push({ label: '⚙ Select All', role: 'selectAll' })
-    template.push({ type: 'separator' })
-  } else if (hasSelection) {
-    template.push({ label: '◆ Copy', role: 'copy' })
-    template.push({ type: 'separator' })
+    template.push({
+      label: '⚙ Select All',
+      click: (): void => {
+        deps.getActiveView()?.webContents.selectAll()
+      }
+    })
+  } else {
+    template.push({
+      label: '➜ Paste',
+      enabled: false
+    })
   }
 
-  // Navigation. In Electron 30, go-back/go-forward live on webContents
-  // itself (navigationHistory exposes only getActiveIndex/length).
+  template.push({ type: 'separator' })
+
   const activeWc = deps.getActiveView()?.webContents
   template.push({
     label: '◄ Back',
     enabled: activeWc ? activeWc.canGoBack() : false,
     click: () => {
-      const wc = deps.getActiveView()?.webContents
-      if (wc?.canGoBack()) wc.goBack()
+      const w = deps.getActiveView()?.webContents
+      if (w?.canGoBack()) w.goBack()
     }
   })
   template.push({
     label: '► Forward',
     enabled: activeWc ? activeWc.canGoForward() : false,
     click: () => {
-      const wc = deps.getActiveView()?.webContents
-      if (wc?.canGoForward()) wc.goForward()
+      const w = deps.getActiveView()?.webContents
+      if (w?.canGoForward()) w.goForward()
     }
   })
   template.push({
@@ -87,9 +104,24 @@ function showMenu(
     }
   })
 
-  // Sign out — only meaningful if we know which service this view is.
   if (activeService) {
     template.push({ type: 'separator' })
+    if (deps.openCookieImport) {
+      template.push({
+        label: '◆ Google Sign-in…',
+        click: (): void => {
+          deps.openCookieImport?.()
+        }
+      })
+    }
+    if (deps.pullChromeGoogle) {
+      template.push({
+        label: '⚡ Pull Google from Chrome',
+        click: (): void => {
+          void deps.pullChromeGoogle?.()
+        }
+      })
+    }
     template.push({
       label: '✗ Sign out (clear session)',
       click: () => {

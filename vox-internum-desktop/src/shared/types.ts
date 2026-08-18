@@ -35,8 +35,36 @@ export const IPC_CHANNELS = {
   VOX_GMAIL_SIGNOUT: 'vox:gmail-signout',
   VOX_GMAIL_FETCH_INBOX: 'vox:gmail-fetch-inbox',
   VOX_GMAIL_FETCH_MESSAGE: 'vox:gmail-fetch-message',
-  VOX_GMAIL_SEND: 'vox:gmail-send'
+  VOX_GMAIL_SEND: 'vox:gmail-send',
+  // Universal Google cookie import (bypasses Google OAuth block)
+  VOX_IMPORT_GOOGLE_COOKIES: 'vox:import-google-cookies',
+  // Chrome / appearance
+  VOX_GET_THEME: 'vox:get-theme',
+  VOX_SET_THEME: 'vox:set-theme',
+  // Update check (GitHub Releases)
+  VOX_CHECK_UPDATE: 'vox:check-update',
+  VOX_DISMISS_UPDATE: 'vox:dismiss-update',
+  VOX_OPEN_UPDATE: 'vox:open-update',
+  VOX_INSTALL_UPDATE: 'vox:install-update',
+  VOX_UPDATE_AVAILABLE: 'vox:update-available'
 } as const
+
+export type UiTheme = 'dark' | 'light'
+
+export interface UpdateInfo {
+  available: boolean
+  /**
+   * True when electron-updater has already downloaded the new version
+   * and the banner's action button should RESTART & INSTALL instead of
+   * opening the release page (Tier 1 auto-update).
+   */
+  readyToInstall?: boolean
+  currentVersion: string
+  latestVersion: string
+  releaseUrl: string
+  releaseName: string
+  body: string
+}
 
 // ─── Service registry ────────────────────────────────────────
 
@@ -50,14 +78,13 @@ export interface ServiceConfig {
   /** Web URL loaded into the WebContentsView (empty for native services) */
   url: string
   /** Sidebar grouping: messengers vs mail relays. */
-  category: 'messenger' | 'mail'
+  category: 'messenger' | 'mail' | 'ai'
   /**
    * 'web' (default) renders the URL in a WebContentsView. 'native'
-   * means the renderer owns the UI for this service (e.g. Gmail IMAP,
-   * which is rendered as a native inbox list instead of a webview,
-   * because Google blocks Electron sign-in).
+   * means the renderer owns the UI (e.g. Gmail IMAP). 'external'
+   * opens the URL in the system browser (escape hatch only).
    */
-  kind?: 'web' | 'native'
+  kind?: 'web' | 'native' | 'external'
 }
 
 // ─── Runtime shapes ──────────────────────────────────────────

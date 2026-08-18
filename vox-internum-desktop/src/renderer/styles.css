@@ -42,6 +42,76 @@
   --sidebar-width: 56px;
 }
 
+/* ─── Light theme: Solar Forge / golden parchment Mechanicus ─
+   Same copper/brass language as dark, but on aged parchment so the
+   chrome reads as a lit cogitator scroll instead of a void CRT. */
+html[data-theme="light"] {
+  --dm-bg: #f0e6d2;
+  --dm-panel: #f7f0e2;
+  --dm-copper: #9a5a18;
+  --dm-copper-bright: #b8731a;
+  --dm-copper-glow: rgba(154, 90, 24, 0.28);
+  --dm-brass: #8a6020;
+  --dm-brass-dark: #6b4a1c;
+  --dm-red: #8b0000;
+  --dm-red-bright: #a50000;
+  --dm-red-text: #a01818;
+  --dm-green-text: #2a6a2a;
+  --dm-blue-text: #1a5a7a;
+  --dm-amber: #a07020;
+  --dm-gold: var(--dm-copper);
+  --dm-gold-bright: var(--dm-copper-bright);
+  --dm-gold-glow: var(--dm-copper-glow);
+  --dm-muted: #7a5a30;
+  --dm-border: #b8924a;
+  --dm-border-hover: #9a5a18;
+}
+
+html[data-theme="light"] body {
+  text-shadow: none;
+  color: var(--dm-copper);
+  background:
+    radial-gradient(ellipse at 30% 0%, rgba(205, 127, 50, 0.12), transparent 55%),
+    var(--dm-bg);
+}
+
+html[data-theme="light"] body::before {
+  /* Softer forge haze — no heavy CRT black scanlines on parchment. */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(90, 58, 26, 0) 0px,
+      rgba(90, 58, 26, 0) 3px,
+      rgba(90, 58, 26, 0.04) 4px,
+      rgba(90, 58, 26, 0.04) 5px
+    ),
+    radial-gradient(ellipse at center, transparent 60%, rgba(90, 58, 26, 0.12) 100%);
+  animation: none;
+  opacity: 1;
+}
+
+html[data-theme="light"] .sidebar-btn {
+  background: linear-gradient(180deg, #faf3e4 0%, #e8d9b8 100%);
+  border-color: var(--dm-brass);
+}
+
+html[data-theme="light"] .sidebar-btn.active {
+  background: linear-gradient(180deg, rgba(205, 127, 50, 0.22) 0%, rgba(205, 127, 50, 0.08) 100%);
+}
+
+html[data-theme="light"] .modal,
+html[data-theme="light"] .native-panel {
+  background: var(--dm-panel);
+  color: var(--dm-copper);
+}
+
+html[data-theme="light"] .proxy-input,
+html[data-theme="light"] textarea.proxy-input {
+  background: #fff8ec;
+  color: #3d2810;
+  border-color: var(--dm-border);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -111,7 +181,32 @@ button, .sidebar, .sidebar-btn, .panel-h2, .gmail-inbox-header,
   height: 100vh; background: var(--dm-bg);
   border-right: 1px solid var(--dm-border);
   display: flex; flex-direction: column; align-items: center;
-  padding: 8px 0; gap: 4px;
+  padding: 8px 0 6px; gap: 0;
+  overflow: hidden;
+}
+.sidebar-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.sidebar-footer {
+  flex: 0 0 auto;
+  width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dm-border);
+}
+#btn-theme .icon {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: var(--dm-copper-bright);
 }
 
 .sidebar-btn {
@@ -148,19 +243,14 @@ button, .sidebar, .sidebar-btn, .panel-h2, .gmail-inbox-header,
   font-size: 11px; pointer-events: none;
 }
 
-.sidebar-spacer { flex: 1; }
-
 /* Category separator between messengers and mail relays. */
 .sidebar-separator {
   width: 60%;
   height: 1px;
   margin: 6px 0;
+  flex: 0 0 auto;
   background: var(--dm-muted);
   opacity: 0.5;
-}
-
-.sidebar-btn-bottom {
-  margin-top: auto;
 }
 
 /* Unread badge: red dot with count on top-right of icon */
@@ -173,6 +263,25 @@ button, .sidebar, .sidebar-btn, .panel-h2, .gmail-inbox-header,
   font-size: 9px; line-height: 14px; text-align: center;
   font-weight: 700; letter-spacing: 0;
   box-shadow: 0 0 8px rgba(139, 0, 0, 0.6);
+}
+
+/* ─── Update banner ───────────────────────────────────────── */
+.update-banner {
+  position: fixed; top: 8px; left: calc(var(--sidebar-width) + 12px); right: 12px;
+  z-index: 10050;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--dm-panel);
+  border: 1px solid var(--dm-copper);
+  box-shadow: 0 0 18px var(--dm-copper-glow);
+  font-family: var(--font-data);
+  letter-spacing: 0.12em;
+}
+.update-banner.hidden { display: none; }
+.update-banner-text {
+  flex: 1; min-width: 160px;
+  color: var(--dm-copper-bright);
+  font-size: 11px;
 }
 
 /* ─── Main area (hole under the WebContentsView) ──────────── */

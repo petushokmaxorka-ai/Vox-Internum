@@ -1,14 +1,14 @@
 # ◆ VOX INTERNUM
 
 > Dark Mechanicus messenger aggregator. One Electron shell, one isolated
-> session per service. Telegram, VK, MAX — in a single WH40k-themed window.
+> session per service. Telegram, VK, MAX, OK — in a single WH40k-themed window.
 
 ## ⚒ What it is
 
 A standalone desktop client that embeds the **web versions** of several
 messengers, each in its own persistent Chromium session partition
 (`persist:vox-internum-<id>`). Cookies, cache and localStorage are fully
-separated between services — Telegram cannot see VK, VK cannot see MAX.
+separated between services — Telegram cannot see VK, VK cannot see OK.
 
 This is the foundation layer. Everything privacy-related that comes later
 (per-service Smart Proxy, telemetry firewall, anti-fingerprinting,
@@ -20,17 +20,35 @@ partitions without changing the architecture.
 | Telegram | `https://web.telegram.org/k/` | free |
 | VK       | `https://vk.com/im`           | free |
 | MAX      | `https://web.max.ru/`         | free |
+| OK       | `https://ok.ru/messages`      | free |
 | Gmail    | `https://mail.google.com/mail/u/0/` | free |
 | Yandex Mail | `https://mail.yandex.ru/`    | free |
 | Mail.ru | `https://e.mail.ru/inbox/`    | free |
 
 ## ⚙ Stack
 
-- Electron 30+ — `WebContentsView` (not the deprecated `<webview>`/`BrowserView`)
+- Electron 43+ — `WebContentsView` (not the deprecated `<webview>`/`BrowserView`)
 - electron-vite + TypeScript
 - electron-store — persistence (`lastActiveService`)
+- electron-updater — auto-update from GitHub Releases
 - electron-builder — AppImage / NSIS / DMG
 - Vanilla TS renderer (no React at this scale), Dark Mechanicus theme
+
+## ➜ Auto-update
+
+Two tiers, picked automatically at runtime:
+
+1. **Full auto-update** (AppImage on Linux, NSIS install on Windows):
+   the app polls GitHub Releases, downloads the new version in the
+   background, then shows a `RESTART & UPDATE` banner. The update also
+   installs on quit, so ignoring the banner is safe.
+2. **Banner fallback** (tar.gz, portable exe / zip, unsigned macOS, dev):
+   a banner with a `DOWNLOAD` button that opens the release page in the
+   system browser.
+
+Releases live in [petushokmaxorka-ai/vox-internum](https://github.com/petushokmaxorka-ai/vox-internum)
+(tags: `v<semver>`) and must ship `latest-linux.yml` / `latest.yml`
+next to the artifacts — tier 1 reads them.
 
 ## ➜ Build from source
 
@@ -38,9 +56,9 @@ partitions without changing the architecture.
 npm install
 npm run dev               # dev mode (hot reload)
 npm run build             # typecheck + electron-vite build → out/
-npm run build:linux       # → release/Vox Internum-0.1.0.AppImage
-npm run build:win         # → release/Vox Internum Setup 0.1.0.exe
-npm run build:mac         # → release/Vox Internum-0.1.0.dmg
+npm run build:linux       # → release/Vox.Internum-0.4.0.AppImage
+npm run build:win         # → release/Vox.Internum-Setup-0.4.0.exe
+npm run build:mac         # → release/Vox Internum-0.4.0.dmg
 ```
 
 ## ◆ User flow
@@ -70,7 +88,7 @@ npm run build:mac         # → release/Vox Internum-0.1.0.dmg
    "use the app" promo banners. Selectors are defensive (ID-first,
    class-fallback) and re-applied on every `dom-ready` since SPAs
    rebuild DOM.
-10. **Licensing** — a Cloudflare Worker (`services/license-worker`)
+10. **Licensing** — a Cloudflare Worker (`../license-worker`)
     issues and verifies opaque activation tokens with device binding
     (max 3 devices) and revocation. The desktop client shows a
     TRIAL/LICENSED/EXPIRED badge in the sidebar; click it to paste a

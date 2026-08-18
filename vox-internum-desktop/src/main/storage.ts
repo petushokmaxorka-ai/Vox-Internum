@@ -12,7 +12,7 @@
 //   the headless/no-keyring fallback path explicitly.
 
 import Store from 'electron-store'
-import type { ProxyMap, ProxyConfig } from '../shared/types'
+import type { ProxyMap, ProxyConfig, UiTheme } from '../shared/types'
 import { SERVICES } from './services'
 
 interface Schema {
@@ -20,12 +20,20 @@ interface Schema {
   lastActiveService: string
   /** Per-service proxy URLs. Missing key = direct connection. */
   proxies: ProxyMap
+  /** Chrome UI theme: dark (void CRT) or light (golden parchment forge). */
+  theme: UiTheme
+  /** Last update version the user dismissed (banner). */
+  dismissedUpdateVersion: string
 }
 
 const store = new Store<Schema>({
   defaults: {
     lastActiveService: 'telegram',
-    proxies: {}
+    proxies: {},
+    // Golden Mechanicus light is the default chrome; messengers keep
+    // their own dark/light via their settings (we never force nativeTheme).
+    theme: 'light',
+    dismissedUpdateVersion: ''
   }
 })
 
@@ -36,6 +44,25 @@ export function getLastActiveService(): string {
 
 export function setLastActiveService(id: string): void {
   store.set('lastActiveService', id)
+}
+
+// ─── Theme ──────────────────────────────────────────────────
+export function getTheme(): UiTheme {
+  const t = store.get('theme')
+  return t === 'dark' ? 'dark' : 'light'
+}
+
+export function setTheme(theme: UiTheme): void {
+  store.set('theme', theme === 'dark' ? 'dark' : 'light')
+}
+
+// ─── Updates ────────────────────────────────────────────────
+export function getDismissedUpdateVersion(): string {
+  return store.get('dismissedUpdateVersion') || ''
+}
+
+export function setDismissedUpdateVersion(version: string): void {
+  store.set('dismissedUpdateVersion', version)
 }
 
 // ─── Smart Proxy ────────────────────────────────────────────

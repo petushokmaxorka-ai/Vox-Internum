@@ -17,7 +17,7 @@
 // Switching is done by visibility, NOT by destroying/recreating views:
 // this keeps login sessions warm and avoids reloading on every switch.
 
-import { BrowserWindow, WebContentsView, session } from 'electron'
+import { BrowserWindow, WebContentsView, session, shell, type Session } from 'electron'
 import { SERVICES, partitionFor, findService, DEFAULT_SERVICE } from './services'
 import { attachLoginHandler, applyProxy, applySystemProxy, parseProxy } from './session-router'
 import { applyInquisition } from './inquisition'
@@ -45,6 +45,10 @@ export class ViewManager {
   private win: BrowserWindow | null = null
   private onUnread: ((u: UnreadUpdate) => void) | null = null
   private onLoading: ((l: LoadingUpdate) => void) | null = null
+  /** Callback fired when user picks "Import Google Cookies". */
+  public onCookieImport: (() => void) | null = null
+  /** Context-menu: open Chrome + pull Google cookies via CDP. */
+  public onPullChromeGoogle: (() => Promise<void>) | null = null
   /** Last unread count per service — MCP reads this. */
   private unread = new Map<string, number>()
 
@@ -65,26 +69,31 @@ export class ViewManager {
       // Native services (Gmail IMAP) own their UI in the renderer;
       // skip creating a WebContentsView for them. The main area
       // shows a native panel instead.
-      if (svc.kind === 'native') continue
+      // Native / external: no embedded WebContentsView.
+      if (svc.kind === 'native' || svc.kind === 'external') continue
       // Proxy routing BEFORE first loadURL.
-      //   - If the user set an explicit Smart Proxy → use it.
-      //   - Otherwise → resolve the system proxy from env (HTTP_PROXY /
-      //     HTTPS_PROXY / ALL_PROXY) and apply it explicitly. Electron's
-      //     {mode:'system'} is unreliable across versions; reading env
-      //     and calling setProxy with explicit proxyRules is the robust
-      //     path. Without this, services behind a regional block
-      //     (Telegram in RU) fail with ERR_NETWORK_CHANGED → black screen.
-      //
-      // Fire-and-forget: setProxy can block on proxy-PAC resolution;
-      // awaiting it inside init stalled startup. We run it in the
-      // background; loadURL is triggered later by ensureLoaded on
-      // first switch, by which time the proxy is in place.
+      //   - Explicit Smart Proxy URL → use it (incl. direct://).
+      //   - AI / mail with no override → DIRECT by default.
+      //     ALL_PROXY/xray often breaks Chinese CDNs + Google OAuth
+      //     callbacks (SSL -100 / blank MiniMax, Qwen timeouts).
+      //   - Messengers with no override → system proxy from env
+      //     (Telegram/WhatsApp need it in RU).
       const stored = getProxy(svc.id)
-      if (stored.url && stored.url.trim() && stored.url.trim().toLowerCase() !== 'direct://') {
-        const parsed = parseProxy(stored.url)
-        void applyProxy(svc.id, parsed)
+      const raw = (stored.url || '').trim()
+      const lower = raw.toLowerCase()
+      if (lower === 'direct://' || lower === 'direct') {
+        await applyProxy(svc.id, parseProxy('direct://'))
+        console.log(`[vox-internum:proxy] ${svc.id} Smart Proxy direct://`)
+      } else if (raw) {
+        const parsed = parseProxy(raw)
+        await applyProxy(svc.id, parsed)
+        console.log(`[vox-internum:proxy] ${svc.id} Smart Proxy ${parsed.proxyRules}`)
+      } else if (svc.category === 'ai' || svc.category === 'mail') {
+        await applyProxy(svc.id, parseProxy('direct://'))
+        console.log(`[vox-internum:proxy] ${svc.id} default direct (AI/mail — skip VPN)`)
       } else {
-        void applySystemProxy(svc.id)
+        const applied = await applySystemProxy(svc.id)
+        console.log(`[vox-internum:proxy] ${svc.id} system/default → ${applied}`)
       }
 
       const ses = session.fromPartition(partitionFor(svc.id))
@@ -112,10 +121,16 @@ export class ViewManager {
           // and requestAnimationFrame are automatically throttled. This
           // is the safe mechanism — JS-visible document.visibilityState
           // hacks broke Telegram Web K / Gmail / mail.ru SPAs.
-          backgroundThrottling: true
+          // Messengers keep throttling OFF so voice/video notes keep
+          // decoding when the window briefly loses focus.
+          backgroundThrottling: svc.category !== 'messenger',
+          // Voice messages / media elements must be allowed to play.
+          autoplayPolicy: 'no-user-gesture-required'
         }
       })
-      view.setBackgroundColor('#000000')
+      view.setBackgroundColor('#00000000')
+      // Never start muted — Electron can inherit a muted flag across reloads.
+      view.webContents.setAudioMuted(false)
 
       // Install the proxy auth 'login' handler on this view's
       // webContents. Reads creds from session-router's store.
@@ -125,7 +140,10 @@ export class ViewManager {
       this.views.set(svc.id, entry)
 
       // Loading lifecycle -> notify renderer for the loading overlay.
+      // Only the ACTIVE service drives the overlay — background SPA
+      // navigations must not spam IPC / DOM work (felt like jank).
       view.webContents.on('did-start-loading', () => {
+        if (this.activeId !== svc.id) return
         this.onLoading?.({ service: svc.id, loading: true })
       })
       view.webContents.on('dom-ready', () => {
@@ -134,37 +152,49 @@ export class ViewManager {
         // on route change, so chrome elements reappear and must be
         // hidden again. insertCSS dedupes by content.
         applyCleaner(view, svc.id)
-        this.onLoading?.({ service: svc.id, loading: false })
+        if (this.activeId === svc.id) {
+          this.onLoading?.({ service: svc.id, loading: false })
+        }
       })
       view.webContents.on('did-stop-loading', () => {
+        if (this.activeId !== svc.id) return
         this.onLoading?.({ service: svc.id, loading: false })
       })
 
-      // Auto-retry on load failure. Common cause: ERR_NETWORK_CHANGED
-      // when the host's network route flaps during the initial fetch
-      // (the user reported a black Telegram tab from this). Without
-      // a retry, the view stays blank forever. Bounded to 5 attempts
-      // with backoff so we don't hammer a genuinely broken endpoint.
-      view.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
-        // Ignore sub-resource failures and user-initiated aborts.
-        if (errorCode === -3 /* ERR_ABORTED */) return
-        const attempts = (entry.retryCount ?? 0) + 1
-        entry.retryCount = attempts
-        if (attempts > 5) {
-          console.error(
-            `[vox-internum] ${svc.id} load failed after 5 retries: ${errorDescription} (${errorCode})`
+      // Auto-retry on MAIN-FRAME load failure only. Common cause:
+      // ERR_NETWORK_CHANGED when the host's network route flaps during
+      // the initial fetch (black Telegram tab). Subframe/CDN failures
+      // must NOT reload the top document — that caused reload storms
+      // and felt like freezes. Bounded to 5 attempts with backoff.
+      view.webContents.on(
+        'did-fail-load',
+        (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+          if (!isMainFrame) return
+          // Ignore user-initiated aborts.
+          if (errorCode === -3 /* ERR_ABORTED */) return
+          const attempts = (entry.retryCount ?? 0) + 1
+          entry.retryCount = attempts
+          if (attempts > 5) {
+            console.error(
+              `[vox-internum] ${svc.id} load failed after 5 retries: ${errorDescription} (${errorCode})`
+            )
+            this.onLoading?.({ service: svc.id, loading: false })
+            return
+          }
+          const delay = Math.min(800 * Math.pow(2, attempts - 1), 8000)
+          console.warn(
+            `[vox-internum] ${svc.id} load failed (${errorDescription}, code ${errorCode}); retry ${attempts}/5 in ${delay}ms`
           )
-          this.onLoading?.({ service: svc.id, loading: false })
-          return
+          setTimeout(() => {
+            if (entry.view.webContents.isDestroyed()) return
+            void entry.view.webContents.loadURL(validatedURL || svc.url)
+          }, delay)
         }
-        const delay = Math.min(800 * Math.pow(2, attempts - 1), 8000)
-        console.warn(
-          `[vox-internum] ${svc.id} load failed (${errorDescription}, code ${errorCode}); retry ${attempts}/5 in ${delay}ms`
-        )
-        setTimeout(() => {
-          if (entry.view.webContents.isDestroyed()) return
-          void entry.view.webContents.loadURL(validatedURL || svc.url)
-        }, delay)
+      )
+
+      // Successful main-frame navigation → allow future retries.
+      view.webContents.on('did-finish-load', () => {
+        entry.retryCount = 0
       })
 
       // Unread-count badge via page title parsing.
@@ -178,38 +208,37 @@ export class ViewManager {
       // External links open in the user's real browser, not inside the view.
       view.webContents.setWindowOpenHandler((details) => {
         const url = details.url
-        // Auth flows (Google sign-in, VK ID SSO, Microsoft, Yandex)
-        // open in popups. If we redirect them to the system browser,
-        // the OAuth round-trip can't complete because the web app
-        // never sees the result. Load these URLs in the current view
-        // so the SPA keeps ownership of the navigation.
-        let urlHost = ''
-        try {
-          urlHost = new URL(url).hostname
-        } catch {
-          urlHost = ''
-        }
-        const isAuthDomain =
-          urlHost === 'accounts.google.com' ||
-          urlHost.endsWith('.accounts.google.com') ||
-          urlHost === 'id.vk.ru' ||
-          urlHost.endsWith('.id.vk.ru') ||
-          urlHost.endsWith('.vk.com') ||
-          urlHost.endsWith('login.microsoftonline.com') ||
-          urlHost.endsWith('login.live.com') ||
-          urlHost.endsWith('passport.yandex.ru') ||
-          urlHost.endsWith('oauth.yandex.ru')
-        if (
-          isAuthDomain &&
-          (url.startsWith('http:') || url.startsWith('https:'))
-        ) {
-          void view.webContents.loadURL(url)
+        if (this.isAuthUrl(url)) {
+          this.openAuthPopup(url, ses)
           return { action: 'deny' }
         }
+
         // Everything else (random external links) → system browser.
-        const { shell } = require('electron') as typeof import('electron')
         void shell.openExternal(url)
         return { action: 'deny' }
+      })
+
+      // Google often navigates INSIDE the WebContentsView (not window.open).
+      // That triggers "browser may not be secure". Hijack those navigations
+      // into a top-level BrowserWindow that shares this partition.
+      view.webContents.on('will-navigate', (e, url) => {
+        if (!this.isAuthUrl(url)) return
+        e.preventDefault()
+        this.openAuthPopup(url, ses)
+      })
+      view.webContents.on('will-redirect', (e, url) => {
+        // Only intercept outbound redirects INTO Google auth from a
+        // non-auth page. If we are already on accounts.google.com inside
+        // a popup this handler is not attached.
+        if (!this.isAuthUrl(url)) return
+        try {
+          const cur = new URL(view.webContents.getURL()).hostname
+          if (cur === 'accounts.google.com' || cur.endsWith('.accounts.google.com')) return
+        } catch {
+          /* continue */
+        }
+        e.preventDefault()
+        this.openAuthPopup(url, ses)
       })
 
       // OS-native desktop notifications: when a service's web app calls
@@ -221,11 +250,17 @@ export class ViewManager {
       // good enough for TG/VK/MAX. The popup click → window.focus is
       // wired at the OS level (StartupWMClass=vox-internum matches).
 
-      // Right-click context menu (copy/paste/reload/sign-out).
+      // Right-click context menu (copy/paste/reload/google/sign-out).
       attachContextMenu(view.webContents, this.win!, {
         getActiveService: () => this.activeId,
         getActiveView: () => this.getActiveView(),
-        signOut: (id) => this.signOut(id)
+        signOut: (id) => this.signOut(id),
+        openCookieImport: () => {
+          this.onCookieImport?.()
+        },
+        pullChromeGoogle: async () => {
+          if (this.onPullChromeGoogle) await this.onPullChromeGoogle()
+        }
       })
 
       this.win!.contentView.addChildView(view)
@@ -235,7 +270,7 @@ export class ViewManager {
       // LAZY LOADING: do NOT call loadURL here. Views are created
       // (sessions wired, handlers attached) but the URL is fetched
       // only on first switch via ensureLoaded(). This keeps the app
-      // light: 6 views cost ~6 idle renderer processes, not 6 active
+      // light: idle blank renderers cost far less than N fully loaded
       // web apps competing for network + CPU + RAM.
     }
 
@@ -262,16 +297,19 @@ export class ViewManager {
   /** Switch the visible view. Hides all others. */
   switch(serviceId: string): void {
     if (!findService(serviceId)) return
-    if (serviceId === this.activeId) return
-    this.activeId = serviceId
     const svc = findService(serviceId)
-    // Native services (Gmail IMAP) have no WebContentsView — the
-    // renderer shows a native panel. We must hide the active web-view
-    // so the panel is visible above it.
-    if (svc?.kind === 'native') {
+    // Native / external: hide web views; renderer shows a panel.
+    // External opens the system browser (escape hatch only).
+    if (svc?.kind === 'native' || svc?.kind === 'external') {
+      this.activeId = serviceId
       for (const [, entry] of this.views) entry.view.setVisible(false)
+      if (svc.kind === 'external' && svc.url) {
+        void shell.openExternal(svc.url)
+      }
       return
     }
+    if (serviceId === this.activeId) return
+    this.activeId = serviceId
     // Ensure the new view has been loaded at least once.
     this.ensureLoaded(serviceId)
     this.applyVisibility()
@@ -286,6 +324,73 @@ export class ViewManager {
   getActiveView(): WebContentsView | null {
     const entry = this.views.get(this.activeId)
     return entry?.view ?? null
+  }
+
+  /** True if URL is a Google / VK / MS / Yandex OAuth host we must not embed. */
+  private isAuthUrl(url: string): boolean {
+    if (!url.startsWith('http:') && !url.startsWith('https:')) return false
+    let host = ''
+    try {
+      host = new URL(url).hostname
+    } catch {
+      return false
+    }
+    return (
+      host === 'accounts.google.com' ||
+      host.endsWith('.accounts.google.com') ||
+      host === 'id.vk.ru' ||
+      host.endsWith('.id.vk.ru') ||
+      host.endsWith('login.microsoftonline.com') ||
+      host.endsWith('login.live.com') ||
+      host.endsWith('passport.yandex.ru') ||
+      host.endsWith('oauth.yandex.ru')
+    )
+  }
+
+  /**
+   * Open OAuth in a top-level BrowserWindow sharing the service
+   * partition. Google rejects WebContentsView embeds; a normal window
+   * with AutomationControlled disabled is accepted more often. On
+   * close, reload the active view so cookies take effect.
+   */
+  openAuthPopup(url: string, ses?: Session): void {
+    const sessionToUse =
+      ses ??
+      session.fromPartition(partitionFor(this.activeId))
+    const popup = new BrowserWindow({
+      width: 520,
+      height: 720,
+      parent: this.win ?? undefined,
+      modal: false,
+      autoHideMenuBar: true,
+      title: 'Sign in — Google',
+      webPreferences: {
+        session: sessionToUse,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+        // No camouflage preload — Google Identity Services refuses
+        // patched navigator.webdriver descriptors.
+      }
+    })
+    popup.webContents.setWindowOpenHandler((details) => {
+      if (details.url.startsWith('http:') || details.url.startsWith('https:')) {
+        void popup.loadURL(details.url)
+      }
+      return { action: 'deny' }
+    })
+    void popup.loadURL(url)
+    popup.on('closed', () => {
+      const active = this.getActiveView()
+      if (active && !active.webContents.isDestroyed()) {
+        void active.webContents.reload()
+      }
+    })
+  }
+
+  /** Convenience: Google accounts home in a popup for the active service. */
+  openGoogleSignIn(): void {
+    this.openAuthPopup('https://accounts.google.com/')
   }
 
   /**
@@ -450,18 +555,26 @@ export class ViewManager {
     }
   }
 
-  /** Recompute bounds for all views after a window resize. */
+  /** Recompute bounds after a window resize / switch.
+   *  Only the ACTIVE view needs fresh geometry during resize drag —
+   *  hidden views are updated on the next switch (applyVisibility). */
   layout(): void {
     if (!this.win) return
     const [width, height] = this.win.getContentSize()
     const viewWidth = Math.max(0, width - SIDEBAR_WIDTH)
+    const bounds = {
+      x: SIDEBAR_WIDTH,
+      y: 0,
+      width: viewWidth,
+      height
+    }
+    const active = this.views.get(this.activeId)
+    if (active) {
+      active.view.setBounds(bounds)
+      return
+    }
     for (const entry of this.views.values()) {
-      entry.view.setBounds({
-        x: SIDEBAR_WIDTH,
-        y: 0,
-        width: viewWidth,
-        height
-      })
+      entry.view.setBounds(bounds)
     }
   }
 
@@ -475,6 +588,8 @@ export class ViewManager {
   }
 
   showActiveView(): void {
+    const svc = findService(this.activeId)
+    if (svc?.kind === 'native' || svc?.kind === 'external') return
     const entry = this.views.get(this.activeId)
     if (entry) entry.view.setVisible(true)
   }
@@ -510,6 +625,10 @@ const INPUT_SELECTORS: Record<string, string[]> = {
   max: [
     'div[contenteditable="true"]',
     'textarea[data-testid="message-input"]'
+  ],
+  ok: [
+    'div[contenteditable="true"]',
+    'textarea[placeholder][class*="input"]'
   ]
 }
 

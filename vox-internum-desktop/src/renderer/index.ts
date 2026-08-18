@@ -13,7 +13,9 @@ import type {
   UnreadUpdate,
   LoadingUpdate,
   ProxyMap,
-  McpApproveRequest
+  McpApproveRequest,
+  UpdateInfo,
+  UiTheme
 } from '../shared/types'
 import { showGmailPanel, hideGmailPanel, wireGmailPanel } from './gmail-imap'
 
@@ -24,30 +26,36 @@ let services: ServiceConfig[] = []
 let activeId = ''
 const unread = new Map<string, number>() // serviceId -> count
 const loading = new Set<string>()        // serviceIds currently loading
+let currentTheme: UiTheme = 'light'
+let pendingUpdate: UpdateInfo | null = null
 
 // ─── Sidebar rendering ──────────────────────────────────────
 function renderSidebar(): void {
-  const sidebar = document.getElementById('sidebar')
-  if (!sidebar) return
+  const scroll = document.getElementById('sidebar-scroll')
+  if (!scroll) return
 
-  // Remove existing service buttons + separators (keep spacer + bottom settings btn).
-  sidebar.querySelectorAll('.sidebar-btn[data-service], .sidebar-separator').forEach((el) => el.remove())
+  // Rebuild service list only — footer (theme/license/settings) stays pinned.
+  scroll.replaceChildren()
 
-  const spacer = sidebar.querySelector('.sidebar-spacer')
-
-  // Group services by category. Render messengers first, then a
-  // separator, then mail relays — mirroring the 40k "vox channels"
-  // vs "astropath relay" split.
+  // Group services by category. Render messengers first, then AI
+  // chats, then mail relays — three sections in the sidebar.
   const messengers = services.filter((s) => s.category === 'messenger')
+  const ai = services.filter((s) => s.category === 'ai')
   const mail = services.filter((s) => s.category === 'mail')
 
   for (const svc of messengers) {
-    sidebar.insertBefore(makeServiceBtn(svc), spacer)
+    scroll.appendChild(makeServiceBtn(svc))
+  }
+  if (ai.length > 0) {
+    scroll.appendChild(makeSeparator())
+    for (const svc of ai) {
+      scroll.appendChild(makeServiceBtn(svc))
+    }
   }
   if (mail.length > 0) {
-    sidebar.insertBefore(makeSeparator(), spacer)
+    scroll.appendChild(makeSeparator())
     for (const svc of mail) {
-      sidebar.insertBefore(makeServiceBtn(svc), spacer)
+      scroll.appendChild(makeServiceBtn(svc))
     }
   }
 }
@@ -98,16 +106,51 @@ function refreshActive(): void {
 
 // ─── Click handler ──────────────────────────────────────────
 async function onServiceClick(id: string): Promise<void> {
-  if (id === activeId) return
-  // Hide Gmail IMAP panel when leaving it.
+  const target = services.find((s) => s.id === id)
+  // Re-click external → reopen system browser (main.switch also does this).
+  if (id === activeId) {
+    if (target?.kind === 'external' && target.url) {
+      await api.switch(id)
+    }
+    return
+  }
+  // Hide panels when leaving.
   if (activeId === 'gmail') hideGmailPanel()
+  hideExternalPanel()
   const res = await api.switch(id)
   if (res.ok) {
     activeId = res.active
     refreshActive()
-    // Show Gmail IMAP panel when entering it.
     if (activeId === 'gmail') void showGmailPanel()
+    showExternalPanelIfNeeded(activeId)
   }
+}
+
+function hideExternalPanel(): void {
+  document.getElementById('external-panel')?.classList.add('hidden')
+}
+
+function showExternalPanelIfNeeded(serviceId: string): void {
+  const svc = services.find((s) => s.id === serviceId)
+  if (svc?.kind !== 'external') {
+    hideExternalPanel()
+    return
+  }
+  const panel = document.getElementById('external-panel')
+  const title = document.getElementById('external-panel-title')
+  const urlEl = document.getElementById('external-panel-url')
+  if (title) title.textContent = `◆ ${svc.name.toUpperCase()} · EXTERNAL`
+  if (urlEl) urlEl.textContent = svc.url
+  panel?.classList.remove('hidden')
+}
+
+function wireExternalPanel(): void {
+  document.getElementById('external-open-btn')?.addEventListener('click', () => {
+    const svc = services.find((s) => s.id === activeId)
+    if (svc?.kind === 'external' && svc.url) {
+      void api.openExternalLink(svc.url)
+    }
+  })
 }
 
 // ─── Loading overlay ────────────────────────────────────────
@@ -139,11 +182,88 @@ api.onLoading((l: LoadingUpdate): void => {
 async function init(): Promise<void> {
   services = await api.getServices()
   activeId = await api.getActive()
+  await initTheme()
   renderSidebar()
   wireSettings()
   wireApproveFlow()
   wireLicense()
   wireGmailPanel()
+  wireExternalPanel()
+  wireCookieImport()
+  wireTheme()
+  wireUpdateBanner()
+  if (activeId === 'gmail') void showGmailPanel()
+  showExternalPanelIfNeeded(activeId)
+}
+
+async function initTheme(): Promise<void> {
+  try {
+    currentTheme = await api.getTheme()
+  } catch {
+    currentTheme = 'light'
+  }
+  applyTheme(currentTheme)
+}
+
+function applyTheme(theme: UiTheme): void {
+  currentTheme = theme
+  document.documentElement.setAttribute('data-theme', theme)
+  const mark = document.getElementById('theme-mark')
+  // ASCII labels — emoji sun/moon often invisible/clipped in sidebar fonts.
+  if (mark) mark.textContent = theme === 'light' ? 'SOL' : 'NOX'
+  const btn = document.getElementById('btn-theme')
+  if (btn) btn.title = theme === 'light' ? 'THEME — SWITCH TO DARK (NOX)' : 'THEME — SWITCH TO LIGHT (SOL)'
+}
+
+function wireTheme(): void {
+  document.getElementById('btn-theme')?.addEventListener('click', () => {
+    void (async () => {
+      const next: UiTheme = currentTheme === 'light' ? 'dark' : 'light'
+      const res = await api.setTheme(next)
+      if (res.ok) applyTheme(res.theme)
+    })()
+  })
+}
+
+function showUpdateBanner(info: UpdateInfo): void {
+  pendingUpdate = info
+  const banner = document.getElementById('update-banner')
+  const text = document.getElementById('update-banner-text')
+  if (text) {
+    text.textContent = info.readyToInstall
+      ? `◆ UPDATE ${info.currentVersion} → ${info.latestVersion} DOWNLOADED  ·  RESTART TO APPLY`
+      : `◆ UPDATE ${info.currentVersion} → ${info.latestVersion}  ·  ${info.releaseName || 'NEW RELEASE'}`
+  }
+  // Tier 1 (downloaded) → RESTART & UPDATE; Tier 2 → open release page.
+  document.getElementById('update-install')?.classList.toggle('hidden', !info.readyToInstall)
+  document.getElementById('update-open')?.classList.toggle('hidden', Boolean(info.readyToInstall))
+  banner?.classList.remove('hidden')
+}
+
+function hideUpdateBanner(): void {
+  document.getElementById('update-banner')?.classList.add('hidden')
+}
+
+function wireUpdateBanner(): void {
+  api.onUpdateAvailable((info) => {
+    if (info.available) showUpdateBanner(info)
+  })
+  document.getElementById('update-open')?.addEventListener('click', () => {
+    if (pendingUpdate?.releaseUrl) void api.openUpdate(pendingUpdate.releaseUrl)
+  })
+  document.getElementById('update-install')?.addEventListener('click', () => {
+    void api.installUpdate()
+  })
+  document.getElementById('update-dismiss')?.addEventListener('click', () => {
+    if (pendingUpdate?.latestVersion && !pendingUpdate.readyToInstall) {
+      void api.dismissUpdate(pendingUpdate.latestVersion)
+    }
+    hideUpdateBanner()
+  })
+  // Manual check once after init (in addition to main's scheduled push).
+  void api.checkUpdate().then((info) => {
+    if (info.available) showUpdateBanner(info)
+  })
 }
 
 // ─── Settings modal (Smart Proxy) ───────────────────────────
@@ -374,6 +494,138 @@ async function onForget(): Promise<void> {
   await api.forgetLicense()
   await refreshLicenseBadge()
   setLicenseMsg('✓ TOKEN FORGOTTEN — TRIAL RESUMED', 'ok')
+}
+
+// ─── Cookie import (Google OAuth bypass) ────────────────────
+function wireCookieImport(): void {
+  window.electronAPI.vox.onOpenCookieImport(() => {
+    document.getElementById('cookie-overlay')?.classList.remove('hidden')
+    void window.electronAPI.vox.hideActiveView()
+  })
+  window.electronAPI.vox.onCookieStatus?.((msg) => {
+    const status = document.getElementById('cookie-status')
+    if (!status) return
+    status.className = msg.ok ? 'modal-status ok' : 'modal-status err'
+    status.textContent = (msg.ok ? '✓ ' : '✗ ') + msg.message
+  })
+  document.getElementById('cookie-close')?.addEventListener('click', async () => {
+    document.getElementById('cookie-overlay')?.classList.add('hidden')
+    await window.electronAPI.vox.showActiveView()
+  })
+
+  document.getElementById('cookie-popup')?.addEventListener('click', async () => {
+    const status = document.getElementById('cookie-status')
+    if (status) { status.className = 'modal-status'; status.textContent = '◆ OPENING ELECTRON POPUP (often blocked)…' }
+    await window.electronAPI.vox.openGoogleSignInPopup()
+    if (status) {
+      status.className = 'modal-status err'
+      status.textContent = '⚠ IF GOOGLE SAYS «NOT SECURE» — USE OPEN REAL CHROME INSTEAD'
+    }
+  })
+
+  document.getElementById('cookie-open-chrome')?.addEventListener('click', async () => {
+    const status = document.getElementById('cookie-status')
+    if (status) {
+      status.className = 'modal-status'
+      status.textContent = '◆ STARTING REAL CHROME…'
+    }
+    const res = await window.electronAPI.vox.openChromeGoogleLogin()
+    if (res.ok) {
+      if (status) {
+        status.className = 'modal-status ok'
+        status.textContent = '✓ CHROME OPEN — SIGN IN, THEN CLICK PULL COOKIES'
+      }
+    } else if (status) {
+      status.className = 'modal-status err'
+      status.textContent = '✗ ' + (res.error || 'FAILED TO START CHROME')
+    }
+  })
+
+  // Pull via CDP from temp Chrome (primary) — button id cookie-auto
+  document.getElementById('cookie-auto')?.addEventListener('click', async () => {
+    const status = document.getElementById('cookie-status')
+    if (status) { status.className = 'modal-status'; status.textContent = '◆ PULLING COOKIES FROM CHROME (CDP)…' }
+    const res = await window.electronAPI.vox.pullChromeCdpCookies()
+    if (res.ok && (res.set ?? 0) > 0) {
+      if (status) {
+        status.className = 'modal-status ok'
+        status.textContent = `✓ ${res.set} COOKIES — SITE LOGGED IN. Chrome stays open for the next AI.`
+      }
+      document.getElementById('cookie-overlay')?.classList.add('hidden')
+      await window.electronAPI.vox.showActiveView()
+    } else {
+      if (status) { status.className = 'modal-status err'; status.textContent = '✗ ' + (res.error || 'PULL FAILED') }
+    }
+  })
+
+  document.getElementById('cookie-stop-chrome')?.addEventListener('click', async () => {
+    const status = document.getElementById('cookie-status')
+    await window.electronAPI.vox.stopChromeGoogleLogin()
+    if (status) {
+      status.className = 'modal-status ok'
+      status.textContent = '✓ LOGIN CHROME CLOSED (Google account kept on disk for next time)'
+    }
+  })
+
+  document.getElementById('cookie-inject')?.addEventListener('click', async () => {
+    const ta = document.getElementById('cookie-input') as HTMLTextAreaElement
+    const raw = (ta?.value || '').trim()
+    const status = document.getElementById('cookie-status')
+    if (!raw) {
+      if (status) { status.className = 'modal-status err'; status.textContent = '◆ PASTE COOKIES FIRST' }
+      return
+    }
+    // Names may include dashes (__Secure-1PSID). Values may contain '='.
+    const pairs: Array<{ name: string; value: string }> = []
+    const seen = new Set<string>()
+    const push = (name: string, value: string): void => {
+      const n = name.trim()
+      const v = value.trim()
+      if (!n || !v || !/^[\w.-]+$/.test(n) || seen.has(n)) return
+      seen.add(n)
+      pairs.push({ name: n, value: v })
+    }
+    if (!raw.includes('\n') && raw.includes(';') && raw.includes('=')) {
+      for (const part of raw.split(';')) {
+        const eq = part.indexOf('=')
+        if (eq > 0) push(part.slice(0, eq), part.slice(eq + 1))
+      }
+    } else {
+      for (const line of raw.split(/\r?\n/)) {
+        const t = line.trim()
+        if (!t || t.startsWith('#')) continue
+        if (t.includes('\t')) {
+          const cols = t.split('\t')
+          if (cols.length >= 2) push(cols[0], cols[1])
+          continue
+        }
+        const eq = t.indexOf('=')
+        if (eq > 0) push(t.slice(0, eq), t.slice(eq + 1))
+      }
+    }
+    if (pairs.length === 0) {
+      if (status) {
+        status.className = 'modal-status err'
+        status.textContent = '◆ NO NAME=VALUE PAIRS (use SID=… lines; __Secure-* names OK)'
+      }
+      return
+    }
+    if (status) { status.className = 'modal-status'; status.textContent = `◆ INJECTING ${pairs.length} COOKIES…` }
+    const res = await window.electronAPI.vox.importGoogleCookies(pairs)
+    if (res.ok && (res.set ?? 0) > 0) {
+      if (status) {
+        status.className = 'modal-status ok'
+        status.textContent = `✓ ${res.set} COOKIES INJECTED — RELOADING`
+      }
+      document.getElementById('cookie-overlay')?.classList.add('hidden')
+      await window.electronAPI.vox.showActiveView()
+    } else {
+      if (status) {
+        status.className = 'modal-status err'
+        status.textContent = '✗ ' + (res.error || (res.set === 0 ? '0 cookies set — check paste format' : 'FAILED'))
+      }
+    }
+  })
 }
 
 void init()

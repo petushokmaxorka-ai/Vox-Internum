@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
@@ -11,15 +11,19 @@
 <div class="app">
   <!-- SIDEBAR: rendered from SERVICES. 56px wide (must match SIDEBAR_WIDTH in main). -->
   <nav class="sidebar" id="sidebar">
-    <!-- Service buttons injected by index.ts -->
-    <div class="sidebar-spacer"></div>
-    <!-- License badge — opens activate modal -->
-    <button class="sidebar-btn sidebar-btn-bottom" id="btn-license" title="LICENSE">
-      <span class="license-badge" id="license-mark">⚒</span>
-    </button>
-    <button class="sidebar-btn sidebar-btn-bottom" id="btn-settings" title="SETTINGS — SMART PROXY">
-      <span class="icon">⚙</span>
-    </button>
+    <!-- Service icons scroll; footer stays pinned so theme/settings never clip. -->
+    <div class="sidebar-scroll" id="sidebar-scroll"></div>
+    <div class="sidebar-footer">
+      <button class="sidebar-btn" id="btn-theme" title="THEME — LIGHT / DARK">
+        <span class="icon" id="theme-mark">SOL</span>
+      </button>
+      <button class="sidebar-btn" id="btn-license" title="LICENSE">
+        <span class="license-badge" id="license-mark">⚒</span>
+      </button>
+      <button class="sidebar-btn" id="btn-settings" title="SETTINGS — SMART PROXY">
+        <span class="icon">⚙</span>
+      </button>
+    </div>
   </nav>
 
   <!-- MAIN AREA: this region is a "hole". The active WebContentsView
@@ -105,7 +109,27 @@
         </div>
       </div>
     </div>
+
+    <!-- EXTERNAL SERVICE PANEL: Chromium cannot load some sites
+         (MiniMax / Akamai IPv6 hang). Opens the system browser instead. -->
+    <div class="native-panel hidden" id="external-panel">
+      <h2 class="panel-h2" id="external-panel-title">◆ EXTERNAL</h2>
+      <p class="gmail-help" id="external-panel-help">
+        This service opens in your system browser (Firefox works; Chromium hangs on broken IPv6).
+      </p>
+      <p class="gmail-help" id="external-panel-url"></p>
+      <button class="modal-btn modal-btn-green" id="external-open-btn">◆ OPEN IN BROWSER</button>
+    </div>
   </main>
+</div>
+
+<!-- UPDATE BANNER: Tier 1 = update downloaded, RESTART to install;
+     Tier 2 = newer GitHub release exists, open the release page -->
+<div class="update-banner hidden" id="update-banner">
+  <span class="update-banner-text" id="update-banner-text">◆ NEW VERSION AVAILABLE</span>
+  <button class="modal-btn modal-btn-green dm-btn-small hidden" id="update-install">◆ RESTART &amp; UPDATE</button>
+  <button class="modal-btn modal-btn-green dm-btn-small" id="update-open">◆ DOWNLOAD</button>
+  <button class="modal-btn dm-btn-small" id="update-dismiss">✗ LATER</button>
 </div>
 
 <!-- SETTINGS MODAL: per-service Smart Proxy.
@@ -162,6 +186,39 @@
       <button class="modal-btn" id="btn-license-close">◆ CLOSE</button>
     </div>
     <div class="modal-status" id="license-msg"></div>
+  </div>
+</div>
+
+<!-- GOOGLE SIGN-IN: real Chrome + CDP (Electron popup is blocked by Google) -->
+<div class="modal-overlay hidden" id="cookie-overlay">
+  <div class="modal">
+    <h2 class="modal-title">◆ GOOGLE SIGN-IN</h2>
+    <p class="modal-desc">Google stays signed in in a dedicated Chrome window — you only type password once. For each AI: Sign in with Google (account picker) → PULL.</p>
+    <ol class="gmail-steps">
+      <li><b>OPEN REAL CHROME</b> → sign in to Google <i>(once)</i></li>
+      <li><b>PULL</b> → opens this AI site in the same Chrome</li>
+      <li>In Chrome: Sign in with Google → wait for the chat</li>
+      <li><b>PULL</b> again → Vox logs in; <b>Chrome stays open</b> for the next AI</li>
+    </ol>
+    <p class="modal-desc">Switch to another AI tab and repeat from step 2 — no password again.</p>
+    <div class="proxy-actions" style="flex-wrap:wrap;gap:8px">
+      <button class="modal-btn modal-btn-green" id="cookie-open-chrome">◆ OPEN REAL CHROME</button>
+      <button class="modal-btn modal-btn-green" id="cookie-auto">⚡ PULL COOKIES</button>
+      <button class="modal-btn" id="cookie-stop-chrome">✗ CLOSE LOGIN CHROME</button>
+      <button class="modal-btn" id="cookie-close">◆ CLOSE</button>
+    </div>
+    <details class="gmail-steps" style="margin-top:12px">
+      <summary>Fallbacks (Electron popup / manual paste)</summary>
+      <div class="proxy-actions" style="margin:8px 0;flex-wrap:wrap;gap:8px">
+        <button class="modal-btn" id="cookie-popup">Electron popup (Google often blocks)</button>
+      </div>
+      <p class="modal-desc">Manual paste (right-click Copy in Chrome DevTools Application → Cookies, or paste SID=… lines):</p>
+      <div class="modal-field">
+        <textarea class="proxy-input gmail-cookies-input" id="cookie-input" rows="5" placeholder="SID=…&#10;HSID=…&#10;SAPISID=…"></textarea>
+      </div>
+      <button class="modal-btn modal-btn-green" id="cookie-inject">◆ INJECT &amp; RELOAD</button>
+    </details>
+    <div class="modal-status" id="cookie-status"></div>
   </div>
 </div>
 

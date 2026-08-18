@@ -1,14 +1,15 @@
 {
   "name": "vox-internum-desktop",
-  "version": "0.1.0",
-  "description": "VOX INTERNUM \u2014 Dark Mechanicus messenger aggregator (Electron)",
+  "version": "0.4.0",
+  "description": "VOX INTERNUM — Dark Mechanicus messenger aggregator (Electron)",
   "main": "./out/main/index.js",
   "author": {
     "name": "Heretic OS",
     "email": "heretic@heretic-os.dev"
   },
   "license": "MIT",
-  "homepage": "https://github.com/HereticArch/heretic-os",
+  "homepage": "https://github.com/petushokmaxorka-ai/vox-internum",
+  "desktopName": "vox-internum",
   "scripts": {
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
@@ -25,32 +26,48 @@
     "build:all": "npm run build && electron-builder -mlw"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.1",
-    "@electron-toolkit/utils": "^3.0.0",
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@types/node": "^20.14.8",
-    "electron": "^30.5.1",
-    "electron-builder": "^24.9.1",
-    "electron-vite": "^2.3.0",
-    "typescript": "^5.5.2",
-    "vite": "^5.3.1"
+    "@types/node": "^24",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "resedit": "^3.0.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
   },
   "build": {
     "productName": "Vox Internum",
     "appId": "dev.heretic-os.vox-internum",
-    "asar": false,
+    "asar": true,
+    "afterPack": "./scripts/patch-win-exe.cjs",
+    "publish": {
+      "provider": "github",
+      "owner": "petushokmaxorka-ai",
+      "repo": "vox-internum"
+    },
     "directories": {
       "output": "release"
     },
     "files": [
-      "out"
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
     ],
     "linux": {
+      "artifactName": "Vox.Internum-${version}.${ext}",
+      "syncDesktopName": true,
       "target": [
         {
           "target": "AppImage",
@@ -67,10 +84,7 @@
       ],
       "category": "Network;InstantMessaging;",
       "maintainer": "Heretic OS <heretic@heretic-os.dev>",
-      "icon": "build/icon.png",
-      "desktop": {
-        "StartupWMClass": "vox-internum"
-      }
+      "icon": "resources/icon.png"
     },
     "win": {
       "target": [
@@ -79,9 +93,25 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "resources/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vox Internum",
+      "artifactName": "Vox.Internum-Setup-${version}.exe"
     },
     "mac": {
       "target": [
@@ -94,7 +124,7 @@
         }
       ],
       "category": "public.app-category.social-networking",
-      "icon": "build/icon.png"
+      "icon": "resources/icon.png"
     }
   }
 }
