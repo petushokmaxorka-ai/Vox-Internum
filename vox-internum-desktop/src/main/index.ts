@@ -306,8 +306,31 @@ function registerIpc(): void {
       const activeId = manager.getActive()
       const active = manager.getActiveView()
       if (!active) return { ok: false, set: 0, skipped: 0, error: 'no active view — open a service tab first' }
-      const { injectGoogleCookiePairs } = await import('./cookie-import')
-      const result = await injectGoogleCookiePairs(active.webContents.session, pairs)
+      const { injectGoogleCookiePairs, injectCookiesFull } = await import('./cookie-import')
+      // Service-aware paste: Google session markers keep the legacy Google
+      // path (AI "Sign in with Google"). Plain session cookies pasted on
+      // mail.ru / Yandex must be written to that service's own domain,
+      // not .google.com — otherwise the jar stays empty for e.mail.ru.
+      const googleMarkers = new Set(['SID', 'HSID', 'SSID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'])
+      const serviceDomain =
+        activeId === 'mailru' ? '.mail.ru' :
+        activeId === 'yandex' ? '.yandex.ru' :
+        ''
+      const looksLikeGoogle = pairs.some((p) => googleMarkers.has(p.name))
+      const result = serviceDomain && !looksLikeGoogle
+        ? await injectCookiesFull(
+            active.webContents.session,
+            pairs.map((p) => ({
+              name: p.name,
+              value: p.value,
+              domain: serviceDomain,
+              path: '/',
+              secure: true,
+              httpOnly: false
+            })),
+            { requireGoogleSession: false }
+          )
+        : await injectGoogleCookiePairs(active.webContents.session, pairs)
       if (result.ok) {
         manager.reloadService(activeId)
       }
