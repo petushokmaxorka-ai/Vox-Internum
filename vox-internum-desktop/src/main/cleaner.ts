@@ -33,20 +33,12 @@ import type { WebContentsView } from 'electron'
 // ─── Per-service CSS ────────────────────────────────────────
 
 const AI_COMMON_CSS = `
-  /* Common cleanup for AI chat services. They all have cookie
-     consent banners, "download app" promos, and side panels we
-     don't need inside Vox Internum. */
-  [class*="cookie"],
-  [class*="Cookie"],
-  [id*="cookie"],
-  [class*="download-app"],
-  [class*="DownloadApp"],
-  [class*="install-prompt"],
-  [class*="promo-banner"],
-  [class*="PromoBanner"],
-  [class*="app-banner"] {
-    display: none !important;
-  }
+  /* AI cleaners are intentionally DISABLED.
+     The previous broad attribute selectors ([class*="cookie"],
+     [class*="download-app"], [class*="promo-banner"] …) matched
+     transient classes that AI SPAs add on hover/route change and hid
+     chat text / login UI. Until selectors are verified per service,
+     do not inject anything into AI chats. */
 `
 
 const TELEGRAM_CSS = `

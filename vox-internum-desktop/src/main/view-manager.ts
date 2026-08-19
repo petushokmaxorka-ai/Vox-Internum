@@ -208,12 +208,21 @@ export class ViewManager {
       // External links open in the user's real browser, not inside the view.
       view.webContents.setWindowOpenHandler((details) => {
         const url = details.url
-        if (this.isAuthUrl(url)) {
+        // Some login flows (mail.ru/VK ID) first window.open('about:blank')
+        // and only then navigate. Never forward that to the OS browser —
+        // it used to spawn an endless chain of empty external windows.
+        if (!url || url === 'about:blank') {
+          return { action: 'deny' }
+        }
+        if (this.isAuthUrl(url) || this.isSameServicePopup(svc.id, url)) {
           this.openAuthPopup(url, ses)
           return { action: 'deny' }
         }
 
         // Everything else (random external links) → system browser.
+        if (!url.startsWith('http:') && !url.startsWith('https:')) {
+          return { action: 'deny' }
+        }
         void shell.openExternal(url)
         return { action: 'deny' }
       })
@@ -326,7 +335,7 @@ export class ViewManager {
     return entry?.view ?? null
   }
 
-  /** True if URL is a Google / VK / MS / Yandex OAuth host we must not embed. */
+  /** True if URL is an OAuth / SSO host we must not embed in the main view. */
   private isAuthUrl(url: string): boolean {
     if (!url.startsWith('http:') && !url.startsWith('https:')) return false
     let host = ''
@@ -343,8 +352,43 @@ export class ViewManager {
       host.endsWith('login.microsoftonline.com') ||
       host.endsWith('login.live.com') ||
       host.endsWith('passport.yandex.ru') ||
-      host.endsWith('oauth.yandex.ru')
+      host.endsWith('oauth.yandex.ru') ||
+      // Mail.ru / VK ID SSO. e.mail.ru itself stays embedded; only the
+      // account/auth subdomains move to a top-level popup. Without this,
+      // e.mail.ru login window.open() loops into the OS browser forever.
+      host === 'auth.mail.ru' ||
+      host.endsWith('.auth.mail.ru') ||
+      host === 'account.mail.ru' ||
+      host.endsWith('.account.mail.ru') ||
+      host === 'login.mail.ru' ||
+      host.endsWith('.login.mail.ru') ||
+      host === 'id.mail.ru' ||
+      host.endsWith('.id.mail.ru') ||
+      // Kimi / Moonshot sign-in hosts (best-effort; the chat origin itself
+      // remains embedded).
+      host === 'auth.kimi.com' ||
+      host.endsWith('.auth.kimi.com') ||
+      host === 'login.kimi.com' ||
+      host.endsWith('.login.kimi.com') ||
+      host === 'passport.moonshot.cn' ||
+      host.endsWith('.passport.moonshot.cn') ||
+      host === 'account.moonshot.cn' ||
+      host.endsWith('.account.moonshot.cn') ||
+      host === 'auth.moonshot.cn' ||
+      host.endsWith('.auth.moonshot.cn')
     )
+  }
+
+  /** window.open() back into the active service origin = app popup, not an external link. */
+  private isSameServicePopup(serviceId: string, url: string): boolean {
+    if (!url.startsWith('http:') && !url.startsWith('https:')) return false
+    const svc = findService(serviceId)
+    if (!svc?.url) return false
+    try {
+      return new URL(url).hostname === new URL(svc.url).hostname
+    } catch {
+      return false
+    }
   }
 
   /**
@@ -357,13 +401,20 @@ export class ViewManager {
     const sessionToUse =
       ses ??
       session.fromPartition(partitionFor(this.activeId))
+    const svc = findService(this.activeId)
+    let successHost = ''
+    try {
+      successHost = svc?.url ? new URL(svc.url).hostname : ''
+    } catch {
+      successHost = ''
+    }
     const popup = new BrowserWindow({
       width: 520,
       height: 720,
       parent: this.win ?? undefined,
       modal: false,
       autoHideMenuBar: true,
-      title: 'Sign in — Google',
+      title: `Sign in — ${svc?.name ?? 'service'}`,
       webPreferences: {
         session: sessionToUse,
         contextIsolation: true,
@@ -378,6 +429,17 @@ export class ViewManager {
         void popup.loadURL(details.url)
       }
       return { action: 'deny' }
+    })
+    // SSO finished and landed back on the service origin → close the popup;
+    // the 'closed' handler reloads the embedded view with the new cookies.
+    popup.webContents.on('did-navigate', (_e, navUrl) => {
+      if (!successHost) return
+      try {
+        const host = new URL(navUrl).hostname
+        if (host === successHost && !this.isAuthUrl(navUrl)) popup.close()
+      } catch {
+        /* ignore */
+      }
     })
     void popup.loadURL(url)
     popup.on('closed', () => {
