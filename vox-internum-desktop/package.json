@@ -1,6 +1,6 @@
 {
   "name": "vox-internum-desktop",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "VOX INTERNUM — Dark Mechanicus messenger aggregator (Electron)",
   "main": "./out/main/index.js",
   "author": {
