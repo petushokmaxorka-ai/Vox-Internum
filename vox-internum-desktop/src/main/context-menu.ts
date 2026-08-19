@@ -108,7 +108,7 @@ function showMenu(
     template.push({ type: 'separator' })
     if (deps.openCookieImport) {
       template.push({
-        label: '◆ Google Sign-in…',
+        label: '◆ Sign-in / cookies…',
         click: (): void => {
           deps.openCookieImport?.()
         }
