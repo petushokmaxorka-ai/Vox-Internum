@@ -10,14 +10,14 @@ palette, gothic typography, phosphor glow.
 
 ## ## ⬇ Downloads (latest)
 
-**[Release v0.4.0](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.4.0)**
+**[Release v0.5.0](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.5.0)**
 
 | OS | File |
 |----|------|
-| Windows | [Vox.Internum-Setup-0.4.0.exe](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.4.0/Vox.Internum-Setup-0.4.0.exe) *(installer — auto-updates)* |
-| Windows | [Vox.Internum-0.4.0-win-x64.zip](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.4.0/Vox.Internum-0.4.0-win-x64.zip) *(portable — no auto-update)* |
-| Linux | [Vox.Internum-0.4.0.AppImage](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.4.0/Vox.Internum-0.4.0.AppImage) *(auto-updates)* |
-| Linux | [Vox.Internum-0.4.0.tar.gz](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.4.0/Vox.Internum-0.4.0.tar.gz) *(no auto-update)* |
+| Windows | [Vox.Internum-Setup-0.5.0.exe](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.5.0/Vox.Internum-Setup-0.5.0.exe) *(installer — auto-updates)* |
+| Windows | [Vox.Internum-0.5.0-win-x64.zip](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.5.0/Vox.Internum-0.5.0-win-x64.zip) *(portable — no auto-update)* |
+| Linux | [Vox.Internum-0.5.0.AppImage](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.5.0/Vox.Internum-0.5.0.AppImage) *(auto-updates)* |
+| Linux | [Vox.Internum-0.5.0.tar.gz](https://github.com/petushokmaxorka-ai/vox-internum/releases/download/v0.5.0/Vox.Internum-0.5.0.tar.gz) *(no auto-update)* |
 
 All releases: https://github.com/petushokmaxorka-ai/vox-internum/releases
 
@@ -58,7 +58,7 @@ update banner with a download link instead.
 cd vox-internum-desktop
 npm install
 npm run dev               # dev mode
-npm run build:linux       # → release/Vox.Internum-0.4.0.AppImage
+npm run build:linux       # → release/Vox.Internum-0.5.0.AppImage
 ```
 
 ## ◆ Gmail setup (IMAP)
