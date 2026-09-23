@@ -523,6 +523,11 @@ function createTray(win: BrowserWindow): Tray | null {
 
 // ─── Lifecycle ──────────────────────────────────────────────
 app.whenReady().then(() => {
+  // app.quit() above does not stop 'ready' from firing; without this
+  // the second instance built a window, tray and MCP server (EADDRINUSE)
+  // before exiting.
+  if (!gotLock) return
+
   electronApp.setAppUserModelId('dev.heretic-os.vox-internum')
 
   // Linux WM_CLASS must match StartupWMClass=vox-internum in the .desktop
