@@ -256,6 +256,9 @@ async function adminRevoke(req: Request, env: Env): Promise<Response> {
 }
 
 function isAdmin(req: Request, env: Env): boolean {
+  // Secret not configured → admin endpoints are closed. Otherwise the
+  // expected header would be the literal "Bearer undefined".
+  if (!env.ADMIN_KEY) return false
   const auth = req.headers.get('authorization') || ''
   const expected = `Bearer ${env.ADMIN_KEY}`
   // Constant-time-ish comparison.
@@ -290,10 +293,11 @@ export default {
       if (path === '/health' && req.method === 'GET') {
         return json({ ok: true, service: 'vox-internum-license' })
       }
-      if (path === '/activate' && req.method === 'POST') return activate(req, env)
-      if (path === '/verify' && req.method === 'POST') return verify(req, env)
-      if (path === '/admin/create' && req.method === 'POST') return adminCreate(req, env)
-      if (path === '/admin/revoke' && req.method === 'POST') return adminRevoke(req, env)
+      // `return await` so async failures land in the catch below.
+      if (path === '/activate' && req.method === 'POST') return await activate(req, env)
+      if (path === '/verify' && req.method === 'POST') return await verify(req, env)
+      if (path === '/admin/create' && req.method === 'POST') return await adminCreate(req, env)
+      if (path === '/admin/revoke' && req.method === 'POST') return await adminRevoke(req, env)
       return json({ error: 'not found' }, 404)
     } catch (e) {
       return json({ error: (e as Error).message }, 500)
