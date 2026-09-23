@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Desktop (test, typecheck, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vox-internum-desktop
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vox-internum-desktop/package-lock.json
+      # Electron 43 fetches its binary lazily on first launch, so install
+      # does not download it; nothing here launches Electron.
+      - run: npm ci
+      - run: npm test
+      # typecheck (node + web) + electron-vite build → out/
+      - run: npm run build
+
+  license-worker:
+    name: License worker (typecheck, bundle)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: license-worker
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: license-worker/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # wrangler deploy --dry-run: bundles the Worker, needs no account
+      - run: npm run build

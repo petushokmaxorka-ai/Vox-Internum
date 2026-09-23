@@ -5,7 +5,8 @@
 // service (Telegram, VK, MAX), each in an isolated session partition.
 //
 // AGENTS.md compliance:
-//   §3.2 — no subprocess execution anywhere in this app.
+//   §3.2 — no shell execution; only the opt-in Google sign-in helpers
+//          spawn subprocesses (argv only).
 //   §3.4 — electron-store writes only to app.getPath('userData').
 //   §3.7 — contextIsolation:true, sandbox:true, nodeIntegration:false.
 
@@ -227,6 +228,19 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.VOX_INSTALL_UPDATE, () => {
     installUpdate()
     return { ok: true }
+  })
+
+  // External links from the renderer (Gmail setup help, external
+  // services). Only http(s) — never file:// or custom schemes.
+  ipcMain.handle(IPC_CHANNELS.VOX_OPEN_EXTERNAL, async (_e, url: string) => {
+    const target = String(url || '')
+    if (!/^https?:\/\//i.test(target)) return { ok: false }
+    try {
+      await shell.openExternal(target)
+      return { ok: true }
+    } catch {
+      return { ok: false }
+    }
   })
 
   // MCP HITL: renderer responds to an approval request.
@@ -473,7 +487,7 @@ function createTray(win: BrowserWindow): Tray | null {
       click: (): void => {
         win.show()
         win.focus()
-        void win.webContents.send(IPC_CHANNELS.VOX_SWITCH + ':from-tray', s.id)
+        void win.webContents.send(IPC_CHANNELS.VOX_SWITCH_REQUEST, s.id)
       }
     })),
     { type: 'separator' },
@@ -510,6 +524,11 @@ function createTray(win: BrowserWindow): Tray | null {
 
 // ─── Lifecycle ──────────────────────────────────────────────
 app.whenReady().then(() => {
+  // app.quit() above does not stop 'ready' from firing; without this
+  // the second instance built a window, tray and MCP server (EADDRINUSE)
+  // before exiting.
+  if (!gotLock) return
+
   electronApp.setAppUserModelId('dev.heretic-os.vox-internum')
 
   // Linux WM_CLASS must match StartupWMClass=vox-internum in the .desktop
@@ -627,7 +646,16 @@ app.whenReady().then(() => {
       safeSend(IPC_CHANNELS.VOX_MCP_APPROVE_REQUEST, payload)
       return promise
     },
-    injectMessage: (serviceId, text) => manager.injectMessage(serviceId, text)
+    injectMessage: async (serviceId, text) => {
+      const before = manager.getActive()
+      const ok = await manager.injectMessage(serviceId, text)
+      // injectMessage switches to the target view; keep the sidebar in
+      // sync (same path as the tray menu).
+      if (manager.getActive() !== before) {
+        safeSend(IPC_CHANNELS.VOX_SWITCH_REQUEST, manager.getActive())
+      }
+      return ok
+    }
   })
 
   // Wait for the renderer's own HTML to finish loading before spinning
@@ -639,6 +667,9 @@ app.whenReady().then(() => {
       const last = getLastActiveService()
       if (findService(last) && last !== DEFAULT_SERVICE) {
         manager.switch(last)
+        // The renderer already asked for the active id (still the
+        // default) during its own init — tell it about the restore.
+        safeSend(IPC_CHANNELS.VOX_SWITCH_REQUEST, last)
       }
 
       // TEST-ONLY: after views have had time to render, dump a

@@ -5,7 +5,7 @@
 // Renderer never gets direct ipcRenderer access — only the methods
 // explicitly declared here (AGENTS.md §3.7).
 
-import { contextBridge, ipcRenderer, shell } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import type {
   ServiceConfig,
@@ -40,6 +40,11 @@ const electronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.VOX_SWITCH, id),
 
     // Push events from main process
+    onSwitchRequest: (cb: (id: string) => void): (() => void) => {
+      const handler = (_e: unknown, id: string): void => cb(id)
+      ipcRenderer.on(IPC_CHANNELS.VOX_SWITCH_REQUEST, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.VOX_SWITCH_REQUEST, handler)
+    },
     onUnread: (cb: (u: UnreadUpdate) => void): (() => void) => {
       const handler = (_e: unknown, u: UnreadUpdate): void => cb(u)
       ipcRenderer.on(IPC_CHANNELS.VOX_UNREAD_UPDATE, handler)
@@ -93,10 +98,10 @@ const electronAPI = {
     gmailSend: (input: GmailSendInput): Promise<GmailSendResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.VOX_GMAIL_SEND, input),
 
-    // Open an external URL in the system browser
-    openExternalLink: (url: string): Promise<void> => {
-      return shell.openExternal(url)
-    },
+    // Open an external URL in the system browser. Goes through main:
+    // `shell` is undefined in a sandboxed preload.
+    openExternalLink: (url: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.VOX_OPEN_EXTERNAL, url),
 
     // Google cookie import (universal — any service with Google login)
     importGoogleCookies: (

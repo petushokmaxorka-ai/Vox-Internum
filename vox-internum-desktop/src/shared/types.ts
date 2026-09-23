@@ -10,6 +10,9 @@ export const IPC_CHANNELS = {
   VOX_GET_SERVICES: 'vox:get-services',
   VOX_GET_ACTIVE: 'vox:get-active',
   VOX_SWITCH: 'vox:switch',
+  // Main asks the renderer to switch (tray menu, restored last service)
+  // so the sidebar / native panels stay in sync (main -> renderer push)
+  VOX_SWITCH_REQUEST: 'vox:switch-request',
   // Unread badge (main -> renderer push)
   VOX_UNREAD_UPDATE: 'vox:unread-update',
   // Loading state (main -> renderer push)
@@ -38,6 +41,9 @@ export const IPC_CHANNELS = {
   VOX_GMAIL_SEND: 'vox:gmail-send',
   // Universal Google cookie import (bypasses Google OAuth block)
   VOX_IMPORT_GOOGLE_COOKIES: 'vox:import-google-cookies',
+  // Open an http(s) link in the system browser (renderer -> main;
+  // `shell` is not available in the sandboxed preload)
+  VOX_OPEN_EXTERNAL: 'vox:open-external',
   // Chrome / appearance
   VOX_GET_THEME: 'vox:get-theme',
   VOX_SET_THEME: 'vox:set-theme',

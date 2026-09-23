@@ -18,12 +18,19 @@ partitions without changing the architecture.
 | Service | URL | Tier |
 |---------|-----|------|
 | Telegram | `https://web.telegram.org/k/` | free |
+| WhatsApp | `https://web.whatsapp.com/`   | free |
 | VK       | `https://vk.com/im`           | free |
 | MAX      | `https://web.max.ru/`         | free |
 | OK       | `https://ok.ru/messages`      | free |
-| Gmail    | `https://mail.google.com/mail/u/0/` | free |
+| Z.ai     | `https://chat.z.ai/`          | free |
+| Kimi     | `https://www.kimi.com/`       | free |
+| MiniMax  | `https://agent.minimax.io/`   | free |
+| Qwen     | `https://chat.qwen.ai/`       | free |
+| Gmail    | native IMAP/SMTP panel (no web view) | free |
 | Yandex Mail | `https://mail.yandex.ru/`    | free |
 | Mail.ru | `https://e.mail.ru/inbox/`    | free |
+
+The list lives in `src/main/services.ts`.
 
 ## ⚙ Stack
 
@@ -56,9 +63,10 @@ next to the artifacts — tier 1 reads them.
 npm install
 npm run dev               # dev mode (hot reload)
 npm run build             # typecheck + electron-vite build → out/
-npm run build:linux       # → release/Vox.Internum-0.4.0.AppImage
-npm run build:win         # → release/Vox.Internum-Setup-0.4.0.exe
-npm run build:mac         # → release/Vox Internum-0.4.0.dmg
+npm test                  # unit tests (camouflage + IMAP parser)
+npm run build:linux       # → release/Vox.Internum-0.5.0.AppImage
+npm run build:win         # → release/Vox.Internum-Setup-0.5.0.exe
+npm run build:mac         # → release/Vox Internum-0.5.0*.dmg
 ```
 
 ## ◆ User flow
@@ -159,7 +167,9 @@ every tab change.
 
 ## ✗ Security (AGENTS.md compliance)
 
-- **§3.2** — no subprocess execution anywhere in this app.
+- **§3.2** — no shell execution. The only subprocesses are the opt-in
+  Google sign-in helpers (a real Chrome with a temp profile; `secret-tool`
+  / `sqlite3` for Linux Chrome cookie import), spawned with argv only.
 - **§3.4** — `electron-store` writes only to `app.getPath('userData')`.
 - **§3.7** — `contextIsolation:true`, `sandbox:true`, `nodeIntegration:false`.
 - Per-service `persist:` partitions isolate cookies/cache/localStorage.

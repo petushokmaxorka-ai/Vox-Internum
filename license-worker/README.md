@@ -32,14 +32,13 @@ Desktop client ──HTTPS──► Worker ──► LICENSES KV (key → record
 ## 🚀 Deploy (one-time, ~5 min)
 
 ```bash
-cd services/license-worker
+cd license-worker
 npm install
 
 # 1. Create the KV namespaces
 npx wrangler kv:namespace create LICENSES
 npx wrangler kv:namespace create TOKENS
-#   → paste the returned IDs into wrangler.toml (LICENSES binding)
-#   → add a second [[kv_namespaces]] block for TOKENS
+#   → paste the returned IDs into wrangler.toml (LICENSES and TOKENS bindings)
 
 # 2. Set the admin secret (long random string — keep private!)
 npx wrangler secret put ADMIN_KEY
@@ -51,7 +50,7 @@ npm run deploy
 ```
 
 Set that URL in the desktop client via the env var
-`VOX_LICENSE_URL` (see `organa/vox-internum-desktop/src/main/license.ts`).
+`VOX_LICENSE_URL` (see `vox-internum-desktop/src/main/license.ts`).
 
 ## ◆ Issuing a license key (after a sale)
 
@@ -78,14 +77,20 @@ curl -X POST https://vox-internum-license.<you>.workers.dev/admin/revoke \
 ```
 
 All tokens for that key are deleted; the next `/verify` returns
-`{valid:false, reason:"revoked"}`.
+`{valid:false, reason:"unknown token"}` and `/activate` answers
+`{error:"key revoked"}`.
 
 ## 🛠 Local dev
 
 ```bash
-npm run dev   # wrangler dev on http://localhost:8787
+npm run dev         # wrangler dev on http://localhost:8787
+npm run typecheck   # tsc --noEmit
+npm run build       # bundle check (wrangler deploy --dry-run → dist/)
 # Set VOX_LICENSE_URL=http://localhost:8787 in the desktop client.
 ```
+
+`/admin/*` stays closed (403) until `ADMIN_KEY` is set — for local dev
+put `ADMIN_KEY=<something>` in `.dev.vars` (git-ignored).
 
 ## 💰 Money
 
