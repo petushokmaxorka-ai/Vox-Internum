@@ -45,7 +45,7 @@ const electronAPI = {
       ipcRenderer.on(IPC_CHANNELS.VOX_SWITCH_REQUEST, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.VOX_SWITCH_REQUEST, handler)
     },
-    onUnread:(cb: (u: UnreadUpdate) => void): (() => void) => {
+    onUnread: (cb: (u: UnreadUpdate) => void): (() => void) => {
       const handler = (_e: unknown, u: UnreadUpdate): void => cb(u)
       ipcRenderer.on(IPC_CHANNELS.VOX_UNREAD_UPDATE, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.VOX_UNREAD_UPDATE, handler)

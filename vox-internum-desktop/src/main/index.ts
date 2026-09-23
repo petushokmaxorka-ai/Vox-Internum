@@ -5,7 +5,8 @@
 // service (Telegram, VK, MAX), each in an isolated session partition.
 //
 // AGENTS.md compliance:
-//   §3.2 — no subprocess execution anywhere in this app.
+//   §3.2 — no shell execution; only the opt-in Google sign-in helpers
+//          spawn subprocesses (argv only).
 //   §3.4 — electron-store writes only to app.getPath('userData').
 //   §3.7 — contextIsolation:true, sandbox:true, nodeIntegration:false.
 
