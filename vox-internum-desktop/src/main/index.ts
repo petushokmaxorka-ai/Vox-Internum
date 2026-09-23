@@ -645,7 +645,16 @@ app.whenReady().then(() => {
       safeSend(IPC_CHANNELS.VOX_MCP_APPROVE_REQUEST, payload)
       return promise
     },
-    injectMessage: (serviceId, text) => manager.injectMessage(serviceId, text)
+    injectMessage: async (serviceId, text) => {
+      const before = manager.getActive()
+      const ok = await manager.injectMessage(serviceId, text)
+      // injectMessage switches to the target view; keep the sidebar in
+      // sync (same path as the tray menu).
+      if (manager.getActive() !== before) {
+        safeSend(IPC_CHANNELS.VOX_SWITCH_REQUEST, manager.getActive())
+      }
+      return ok
+    }
   })
 
   // Wait for the renderer's own HTML to finish loading before spinning
