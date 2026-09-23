@@ -57,7 +57,8 @@
       "output": "release"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "!out/test-src/**"
     ],
     "extraResources": [
       {
