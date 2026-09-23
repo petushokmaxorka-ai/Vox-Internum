@@ -486,7 +486,7 @@ function createTray(win: BrowserWindow): Tray | null {
       click: (): void => {
         win.show()
         win.focus()
-        void win.webContents.send(IPC_CHANNELS.VOX_SWITCH + ':from-tray', s.id)
+        void win.webContents.send(IPC_CHANNELS.VOX_SWITCH_REQUEST, s.id)
       }
     })),
     { type: 'separator' },
@@ -652,6 +652,9 @@ app.whenReady().then(() => {
       const last = getLastActiveService()
       if (findService(last) && last !== DEFAULT_SERVICE) {
         manager.switch(last)
+        // The renderer already asked for the active id (still the
+        // default) during its own init — tell it about the restore.
+        safeSend(IPC_CHANNELS.VOX_SWITCH_REQUEST, last)
       }
 
       // TEST-ONLY: after views have had time to render, dump a

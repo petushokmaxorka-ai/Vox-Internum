@@ -10,6 +10,9 @@ export const IPC_CHANNELS = {
   VOX_GET_SERVICES: 'vox:get-services',
   VOX_GET_ACTIVE: 'vox:get-active',
   VOX_SWITCH: 'vox:switch',
+  // Main asks the renderer to switch (tray menu, restored last service)
+  // so the sidebar / native panels stay in sync (main -> renderer push)
+  VOX_SWITCH_REQUEST: 'vox:switch-request',
   // Unread badge (main -> renderer push)
   VOX_UNREAD_UPDATE: 'vox:unread-update',
   // Loading state (main -> renderer push)

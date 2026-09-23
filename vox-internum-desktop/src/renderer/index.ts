@@ -167,6 +167,12 @@ function refreshLoading(): void {
 }
 
 // ─── Push event wiring ──────────────────────────────────────
+// Main-initiated switch (tray menu, restored last service): go through
+// the normal click path so activeId, highlight and panels stay in sync.
+api.onSwitchRequest((id: string): void => {
+  void onServiceClick(id)
+})
+
 api.onUnread((u: UnreadUpdate): void => {
   unread.set(u.service, u.count)
   refreshBadges()
