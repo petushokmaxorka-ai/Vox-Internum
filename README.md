@@ -8,7 +8,7 @@
 WH40k cogitator aesthetic: CRT scanlines, copper/brass/AdMech-red
 palette, gothic typography, phosphor glow.
 
-## ## ⬇ Downloads (latest)
+## ⬇ Downloads (latest)
 
 **[Release v0.5.0](https://github.com/petushokmaxorka-ai/vox-internum/releases/tag/v0.5.0)**
 
@@ -27,7 +27,7 @@ RESTART & UPDATE banner). Portable zip / tar.gz builds show an
 update banner with a download link instead.
 
 
-⚒ Features
+## ⚒ Features
 
 - **12 services** in isolated Chromium partitions (cookies/cache separated):
   - Telegram, WhatsApp, VK, MAX, Odnoklassniki (web clients)
@@ -58,6 +58,7 @@ update banner with a download link instead.
 cd vox-internum-desktop
 npm install
 npm run dev               # dev mode
+npm test                  # unit tests
 npm run build:linux       # → release/Vox.Internum-0.5.0.AppImage
 ```
 
