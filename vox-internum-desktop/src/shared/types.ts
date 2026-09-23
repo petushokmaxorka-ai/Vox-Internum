@@ -38,6 +38,9 @@ export const IPC_CHANNELS = {
   VOX_GMAIL_SEND: 'vox:gmail-send',
   // Universal Google cookie import (bypasses Google OAuth block)
   VOX_IMPORT_GOOGLE_COOKIES: 'vox:import-google-cookies',
+  // Open an http(s) link in the system browser (renderer -> main;
+  // `shell` is not available in the sandboxed preload)
+  VOX_OPEN_EXTERNAL: 'vox:open-external',
   // Chrome / appearance
   VOX_GET_THEME: 'vox:get-theme',
   VOX_SET_THEME: 'vox:set-theme',

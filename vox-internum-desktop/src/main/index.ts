@@ -229,6 +229,19 @@ function registerIpc(): void {
     return { ok: true }
   })
 
+  // External links from the renderer (Gmail setup help, external
+  // services). Only http(s) — never file:// or custom schemes.
+  ipcMain.handle(IPC_CHANNELS.VOX_OPEN_EXTERNAL, async (_e, url: string) => {
+    const target = String(url || '')
+    if (!/^https?:\/\//i.test(target)) return { ok: false }
+    try {
+      await shell.openExternal(target)
+      return { ok: true }
+    } catch {
+      return { ok: false }
+    }
+  })
+
   // MCP HITL: renderer responds to an approval request.
   ipcMain.handle(
     IPC_CHANNELS.VOX_MCP_APPROVE_RESPONSE,
